@@ -19,6 +19,8 @@ export default function InvoicesPage() {
   const [customerId, setCustomerId] = useState('all');
   const [month, setMonth] = useState('');
   const [exportMode, setExportMode] = useState('current');
+  const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -93,6 +95,22 @@ export default function InvoicesPage() {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!deletingInvoice) return;
+    setDeleting(true);
+    setErrorMessage('');
+    try {
+      await InvoiceService.deleteInvoice(deletingInvoice.id);
+      setInvoices((current) => current.filter((invoice) => invoice.id !== deletingInvoice.id));
+      setDeletingInvoice(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete invoice.');
+      setDeletingInvoice(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -104,9 +122,10 @@ export default function InvoicesPage() {
         <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Invoices</p><p className="mt-2 text-2xl font-bold">{summary.totalInvoices}</p></div><div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Value</p><p className="mt-2 text-2xl font-bold">{formatMoney(summary.totalValue)}</p></div><div className="rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100"><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Paid</p><p className="mt-2 text-2xl font-bold text-emerald-800">{formatMoney(summary.paid)}</p></div><div className="rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-100"><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Outstanding</p><p className="mt-2 text-2xl font-bold text-amber-800">{formatMoney(summary.outstanding)}</p></div></section>
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_190px_170px_170px]"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.invoice.search} className="min-h-12 rounded-xl border border-slate-300 px-4 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100" /><select value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 font-semibold"><option value="all">Select client</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="min-h-12 rounded-xl border border-slate-300 px-3 font-semibold" aria-label="Select month" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 font-semibold"><option value="all">{t.invoice.allStatuses}</option><option value="paid">{t.status.paid}</option><option value="unpaid">{t.status.unpaid}</option></select></div>
-          <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-3 font-bold">{t.invoice.invoice}</th><th className="px-3 py-3 font-bold">{t.invoice.customer}</th><th className="px-3 py-3 font-bold">{t.invoice.issued}</th><th className="px-3 py-3 text-right font-bold">{t.invoice.totalShort}</th><th className="px-3 py-3 font-bold">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={5} className="px-3 py-10 text-center text-slate-500">{t.invoice.loadingInvoices}</td></tr>}{!loading && filteredInvoices.length === 0 && <tr><td colSpan={5} className="px-3 py-10 text-center text-slate-500">{t.invoice.noMatch}</td></tr>}{filteredInvoices.map((invoice) => { const paid = (invoice.status ?? 'unpaid').toLowerCase() === 'paid'; return <tr key={invoice.id} className="hover:bg-slate-50"><td className="px-3 py-4"><Link href={`/invoices/${invoice.id}`} className="font-bold text-blue-700">{invoice.invoice_number}</Link></td><td className="px-3 py-4"><p className="font-semibold">{invoice.customer?.name ?? t.invoice.customer}</p><p className="text-xs text-slate-500">{invoice.customer?.company_name ?? t.customer.noCompany}</p></td><td className="px-3 py-4 text-slate-600">{formatDate(invoice.created_at)}</td><td className="px-3 py-4 text-right font-bold">{formatMoney(invoice.total_amount)}</td><td className="px-3 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{paid ? t.status.paid : t.status.unpaid}</span></td></tr>; })}</tbody></table></div>
+          <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-3 font-bold">{t.invoice.invoice}</th><th className="px-3 py-3 font-bold">{t.invoice.customer}</th><th className="px-3 py-3 font-bold">{t.invoice.issued}</th><th className="px-3 py-3 text-right font-bold">{t.invoice.totalShort}</th><th className="px-3 py-3 font-bold">Status</th><th className="px-3 py-3 text-right font-bold">{t.invoice.delete}</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-3 py-10 text-center text-slate-500">{t.invoice.loadingInvoices}</td></tr>}{!loading && filteredInvoices.length === 0 && <tr><td colSpan={6} className="px-3 py-10 text-center text-slate-500">{t.invoice.noMatch}</td></tr>}{filteredInvoices.map((invoice) => { const paid = (invoice.status ?? 'unpaid').toLowerCase() === 'paid'; return <tr key={invoice.id} className="hover:bg-slate-50"><td className="px-3 py-4"><Link href={`/invoices/${invoice.id}`} className="font-bold text-blue-700">{invoice.invoice_number}</Link></td><td className="px-3 py-4"><p className="font-semibold">{invoice.customer?.name ?? t.invoice.customer}</p><p className="text-xs text-slate-500">{invoice.customer?.company_name ?? t.customer.noCompany}</p></td><td className="px-3 py-4 text-slate-600">{formatDate(invoice.created_at)}</td><td className="px-3 py-4 text-right font-bold">{formatMoney(invoice.total_amount)}</td><td className="px-3 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{paid ? t.status.paid : t.status.unpaid}</span></td><td className="px-3 py-4 text-right"><button type="button" onClick={() => setDeletingInvoice(invoice)} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100">{t.invoice.delete}</button></td></tr>; })}</tbody></table></div>
         </section>
       </div>
+      {deletingInvoice && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-xl font-bold">{t.invoice.confirmDelete}</h2><p className="mt-2 text-sm text-slate-500">{t.invoice.confirmDeleteDescription}</p><p className="mt-3 font-semibold">{deletingInvoice.invoice_number}</p><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setDeletingInvoice(null)} className="min-h-11 rounded-xl bg-slate-100 px-4 text-sm font-bold text-slate-700">{t.customer.cancel}</button><button type="button" onClick={() => void confirmDelete()} disabled={deleting} className="min-h-11 rounded-xl bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-60">{deleting ? t.invoice.deleting : t.invoice.delete}</button></div></div></div>}
     </main>
   );
 }
