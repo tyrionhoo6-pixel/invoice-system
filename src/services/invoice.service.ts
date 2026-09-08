@@ -90,6 +90,7 @@ export async function generateNextInvoiceNumber(): Promise<string> {
     .from('invoices')
     .select('invoice_number')
     .like('invoice_number', 'IV-%')
+    .eq('is_deleted', false)
     .order('invoice_number', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -131,7 +132,7 @@ export async function createInvoice(invoiceData: CreateInvoiceInput): Promise<In
     .insert(items.map((item) => ({ ...item, invoice_id: invoice.id })));
 
   if (itemsError) {
-    await supabase.from('invoices').delete().eq('id', invoice.id);
+    await supabase.from('invoices').update({ is_deleted: true }).eq('id', invoice.id);
     throw new Error(`Unable to create invoice items: ${itemsError.message}`);
   }
 
@@ -145,6 +146,7 @@ export async function getInvoices(): Promise<Invoice[]> {
   const { data, error } = await supabase
     .from('invoices')
     .select('*, customer:customers(*)')
+    .eq('is_deleted', false)
     .order('created_at', { ascending: false });
   if (error) throw new Error(`Unable to load invoices: ${error.message}`);
   return (data ?? []) as Invoice[];
@@ -155,6 +157,7 @@ export async function getInvoiceById(id: string): Promise<InvoiceWithItems | nul
     .from('invoices')
     .select('*, customer:customers(*), invoice_items(*)')
     .eq('id', id)
+    .eq('is_deleted', false)
     .maybeSingle();
   if (error) throw new Error(`Unable to load invoice: ${error.message}`);
   return data as InvoiceWithItems | null;
@@ -170,6 +173,17 @@ export async function updateInvoiceStatus(id: string, status: 'paid' | 'unpaid')
 
   if (error) throw new Error(`Unable to update invoice status: ${error.message}`);
   return data as Invoice;
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const userId = await getAppUserId();
+  const { error } = await supabase
+    .from('invoices')
+    .update({ is_deleted: true })
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(`Unable to delete invoice: ${error.message}`);
 }
 
 export type CustomerInput = Pick<Customer, 'name' | 'company_name' | 'contact_person' | 'email' | 'phone' | 'address' | 'registration_no' | 'reg_no' | 'sst_no'>;
@@ -262,6 +276,7 @@ export const InvoiceService = {
   getInvoices,
   getInvoiceById,
   updateInvoiceStatus,
+  deleteInvoice,
   getCustomers,
   createCustomer,
   updateCustomer,
