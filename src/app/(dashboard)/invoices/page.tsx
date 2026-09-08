@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { InvoiceService } from '@/services/invoice.service';
 import type { CompanySettings } from '@/types/company';
@@ -11,6 +12,7 @@ import { formatDate, monthKey } from '@/utils/format';
 import { formatMoney } from '@/lib/utils';
 
 export default function InvoicesPage() {
+  const router = useRouter();
   const { t } = useLanguage();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [company, setCompany] = useState<CompanySettings | null>(null);
@@ -103,6 +105,7 @@ export default function InvoicesPage() {
       await InvoiceService.deleteInvoice(deletingInvoice.id);
       setInvoices((current) => current.filter((invoice) => invoice.id !== deletingInvoice.id));
       setDeletingInvoice(null);
+      router.refresh();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to delete invoice.');
       setDeletingInvoice(null);

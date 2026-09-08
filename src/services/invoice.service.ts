@@ -90,7 +90,7 @@ export async function generateNextInvoiceNumber(): Promise<string> {
     .from('invoices')
     .select('invoice_number')
     .like('invoice_number', 'IV-%')
-    .eq('is_deleted', false)
+    .or('is_deleted.eq.false,is_deleted.is.null')
     .order('invoice_number', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -143,11 +143,14 @@ export async function createInvoice(invoiceData: CreateInvoiceInput): Promise<In
 }
 
 export async function getInvoices(): Promise<Invoice[]> {
+  const userId = await getAppUserId();
   const { data, error } = await supabase
     .from('invoices')
     .select('*, customer:customers(*)')
-    .eq('is_deleted', false)
+    .eq('user_id', userId)
+    .or('is_deleted.eq.false,is_deleted.is.null')
     .order('created_at', { ascending: false });
+
   if (error) throw new Error(`Unable to load invoices: ${error.message}`);
   return (data ?? []) as Invoice[];
 }
@@ -157,8 +160,9 @@ export async function getInvoiceById(id: string): Promise<InvoiceWithItems | nul
     .from('invoices')
     .select('*, customer:customers(*), invoice_items(*)')
     .eq('id', id)
-    .eq('is_deleted', false)
+    .or('is_deleted.eq.false,is_deleted.is.null')
     .maybeSingle();
+
   if (error) throw new Error(`Unable to load invoice: ${error.message}`);
   return data as InvoiceWithItems | null;
 }
@@ -176,12 +180,10 @@ export async function updateInvoiceStatus(id: string, status: 'paid' | 'unpaid')
 }
 
 export async function deleteInvoice(id: string): Promise<void> {
-  const userId = await getAppUserId();
   const { error } = await supabase
     .from('invoices')
     .update({ is_deleted: true })
-    .eq('id', id)
-    .eq('user_id', userId);
+    .eq('id', id);
 
   if (error) throw new Error(`Unable to delete invoice: ${error.message}`);
 }
@@ -256,7 +258,9 @@ export async function deleteCustomer(id: string): Promise<void> {
     .from('invoices')
     .select('id', { count: 'exact', head: true })
     .eq('customer_id', id)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .or('is_deleted.eq.false,is_deleted.is.null');
+
   if (invoiceError) throw new Error(`Unable to check customer invoices: ${invoiceError.message}`);
   if ((count ?? 0) > 0) throw new Error('This customer has invoice records and cannot be deleted directly.');
 
