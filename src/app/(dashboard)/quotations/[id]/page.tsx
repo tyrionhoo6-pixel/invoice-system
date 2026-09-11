@@ -134,18 +134,17 @@ export default function QuotationDetailPage() {
     // 修复点：明确节点类型为 HTMLElement
     const element = document.querySelector<HTMLElement>('article.invoice-paper');
     if (element) {
-      try {
-        // 修复点：移除 // @ts-expect-error
-        const html2pdf = (await import('html2pdf.js')).default;
-        const opt = {
-          margin: 0.3,
-          filename: `${buildQuotationFileBaseName(quotation)}.pdf`,
-          // 修复点：添加 as const 明确字面量类型
-          image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
-        };
-        await html2pdf().set(opt).from(element).save();
+try {
+  const html2pdf = (await import('html2pdf.js')).default;
+  const opt = {
+    margin: 0.3,
+    filename: `${buildQuotationFileBaseName(quotation)}.pdf`,
+    image: { type: 'jpeg' as const, quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
+  };
+  await html2pdf().set(opt).from(element as HTMLElement).save();
+}
       } catch (err) {
         console.error('Failed to generate PDF:', err);
       } finally {
@@ -199,7 +198,7 @@ export default function QuotationDetailPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-10 text-center text-slate-500">
-        {t?.quotation?.loading || 'Loading...'}
+        Loading...
       </main>
     );
   }
