@@ -12,7 +12,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body><LanguageProvider><SiteHeader />{children}</LanguageProvider></body>
+      <body suppressHydrationWarning>
+        <LanguageProvider>
+          <SiteHeader />
+          {children}
+        </LanguageProvider>
+      </body>
     </html>
   );
 }

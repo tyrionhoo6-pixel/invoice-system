@@ -24,18 +24,26 @@ export interface Product {
   [key: string]: unknown;
 }
 
+export type InvoiceType = 'standard' | 'proforma';
+
+export type InvoiceStatus = 'paid' | 'unpaid' | 'converted' | 'VOID';
+
 export interface Invoice {
   id: string;
   user_id?: string;
   invoice_number: string;
+  invoice_type?: InvoiceType; 
   customer_id: string;
   total_qty: number;
   subtotal_amount: number;
   less_amount: number;
   total_amount: number;
-  status?: 'paid' | 'unpaid' | string;
+  status: InvoiceStatus;
+  payment_terms?: string | null;
+  requires_customer_signature?: boolean;
   created_at?: string;
   customer?: Customer;
+  is_deleted?: boolean;
   [key: string]: unknown;
 }
 

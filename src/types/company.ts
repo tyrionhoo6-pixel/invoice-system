@@ -13,6 +13,7 @@ export interface CompanySettings {
   bank_account_holder: string;
   payment_terms: string;
   logo_url: string;
+  signature_url?: string;
 }
 
 export const emptyCompanySettings: CompanySettings = {
@@ -27,4 +28,5 @@ export const emptyCompanySettings: CompanySettings = {
   bank_account_holder: '',
   payment_terms: '',
   logo_url: '',
+  signature_url: '',
 };

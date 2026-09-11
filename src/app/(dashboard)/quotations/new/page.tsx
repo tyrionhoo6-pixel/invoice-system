@@ -4,17 +4,19 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Customer, Product } from '@/types/invoice';
-import {
-  InvoiceService,
-  type CreateInvoiceItemInput,
-} from '@/services/invoice.service';
+import { QuotationService, type CreateQuotationItemInput } from '@/services/quotation.service';
 import { useLanguage } from '@/context/LanguageContext';
 import type { CompanySettings } from '@/types/company';
 import { formatMoney } from '@/lib/utils';
 import { formatDate } from '@/utils/format';
 
-type DraftItem = CreateInvoiceItemInput & { key: number };
-type InvoiceDraft = { customerId: string; items: CreateInvoiceItemInput[]; lessAmount: number };
+type DraftItem = CreateQuotationItemInput & { key: number };
+type QuotationDraft = {
+  customerId: string;
+  items: CreateQuotationItemInput[];
+  lessAmount: number;
+  validUntil?: string;
+};
 
 const getRecordValue = (record: object, keys: string[]): string => {
   for (const key of keys) {
@@ -34,22 +36,25 @@ const emptyItem = (key: number): DraftItem => ({
   subtotal: 0,
 });
 
-export default function NewInvoicePage() {
+export default function NewQuotationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('id');
 
   const { t } = useLanguage();
-  const [invoiceNumber, setInvoiceNumber] = useState('Loading...');
+  const [quotationNumber, setQuotationNumber] = useState('Loading...');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  
+
   const [companyInput, setCompanyInput] = useState('');
   const [contactNameInput, setContactNameInput] = useState('');
 
+  // Quotation 专属字段状态
+  const [validUntil, setValidUntil] = useState('');
+
+  // Payment Terms 状态
   const [paymentTermsOption, setPaymentTermsOption] = useState('30 Days');
   const [customPaymentTerms, setCustomPaymentTerms] = useState('');
-  const [requiresCustomerSignature, setRequiresCustomerSignature] = useState(false);
 
   const [items, setItems] = useState<DraftItem[]>([emptyItem(1)]);
   const [lessAmount, setLessAmount] = useState(0);
@@ -59,15 +64,13 @@ export default function NewInvoicePage() {
   const [company, setCompany] = useState<CompanySettings | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  const isProforma = invoiceNumber.startsWith('PI');
-
   useEffect(() => {
     const initializeForm = async () => {
       try {
         const [loadedCustomers, loadedProducts, companySettings] = await Promise.all([
-          InvoiceService.getCustomers(),
-          InvoiceService.getProducts(),
-          InvoiceService.getCompanySettings(),
+          QuotationService.getCustomers(),
+          QuotationService.getProducts(),
+          QuotationService.getCompanySettings(),
         ]);
 
         setCustomers(loadedCustomers);
@@ -85,30 +88,33 @@ export default function NewInvoicePage() {
         }
 
         if (editId) {
-          const existingInvoice = await InvoiceService.getInvoiceById(editId);
-          if (existingInvoice) {
-            setInvoiceNumber(existingInvoice.invoice_number);
-            setLessAmount(Number(existingInvoice.less_amount) || 0);
-            setRequiresCustomerSignature(!!existingInvoice.requires_customer_signature);
+          const existing = await QuotationService.getQuotationById(editId);
+          if (existing) {
+            setQuotationNumber(existing.quotation_number);
+            setLessAmount(Number(existing.less_amount) || 0);
 
-            if (existingInvoice.payment_terms) {
+            // 回显 Quotation 专属字段
+            if (existing.valid_until) setValidUntil(existing.valid_until.split('T')[0]);
+
+            // 回显 Payment Terms
+            if (existing.payment_terms) {
               const stdOptions = ['Cash / COD', '7 Days', '14 Days', '30 Days', '60 Days'];
-              if (stdOptions.includes(existingInvoice.payment_terms)) {
-                setPaymentTermsOption(existingInvoice.payment_terms);
+              if (stdOptions.includes(existing.payment_terms)) {
+                setPaymentTermsOption(existing.payment_terms);
               } else {
                 setPaymentTermsOption('Custom');
-                setCustomPaymentTerms(existingInvoice.payment_terms);
+                setCustomPaymentTerms(existing.payment_terms);
               }
             }
 
-            if (existingInvoice.customer) {
-              setCompanyInput(existingInvoice.customer.company_name || existingInvoice.customer.name || '');
-              setContactNameInput(existingInvoice.customer.name || '');
+            if (existing.customer) {
+              setCompanyInput(existing.customer.company_name || existing.customer.name || '');
+              setContactNameInput(existing.customer.name || '');
             }
 
-            if (existingInvoice.invoice_items && existingInvoice.invoice_items.length > 0) {
+            if (existing.quotation_items && existing.quotation_items.length > 0) {
               setItems(
-                existingInvoice.invoice_items.map((item, idx) => ({
+                existing.quotation_items.map((item, idx) => ({
                   key: Date.now() + idx,
                   product_id: item.product_id ?? null,
                   description: item.product_name || '',
@@ -120,27 +126,35 @@ export default function NewInvoicePage() {
               );
             }
           } else {
-            setErrorMessage('Invoice not found.');
+            setErrorMessage('Quotation not found.');
           }
         } else {
-          const number = await InvoiceService.generateNextInvoiceNumber();
-          setInvoiceNumber(number);
+          const number = await QuotationService.generateNextQuotationNumber();
+          setQuotationNumber(number);
 
-          const duplicateDraft = sessionStorage.getItem('invoice-duplicate-draft');
+          const duplicateDraft = sessionStorage.getItem('quotation-duplicate-draft');
           if (duplicateDraft) {
-            const draft = JSON.parse(duplicateDraft) as InvoiceDraft;
-            const matchedCust = loadedCustomers.find(c => c.id === draft.customerId);
+            const draft = JSON.parse(duplicateDraft) as QuotationDraft;
+            const matchedCust = loadedCustomers.find((c) => c.id === draft.customerId);
             if (matchedCust) {
               setCompanyInput(matchedCust.company_name || matchedCust.name);
               setContactNameInput(matchedCust.name || '');
             }
-            setItems(draft.items.map((item, index) => ({ ...item, unit: item.unit || 'pcs', key: Date.now() + index })));
+            if (draft.validUntil) setValidUntil(draft.validUntil);
+
+            setItems(
+              draft.items.map((item, index) => ({
+                ...item,
+                unit: item.unit || 'pcs',
+                key: Date.now() + index,
+              }))
+            );
             setLessAmount(draft.lessAmount);
-            sessionStorage.removeItem('invoice-duplicate-draft');
+            sessionStorage.removeItem('quotation-duplicate-draft');
           }
         }
       } catch (error: unknown) {
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize quotation form.');
       } finally {
         setLoading(false);
       }
@@ -156,7 +170,9 @@ export default function NewInvoicePage() {
   const handleSelectExistingCustomer = (companyName: string) => {
     setCompanyInput(companyName);
     const matched = customers.find(
-      (c) => c.company_name?.toLowerCase() === companyName.toLowerCase() || c.name?.toLowerCase() === companyName.toLowerCase()
+      (c) =>
+        c.company_name?.toLowerCase() === companyName.toLowerCase() ||
+        c.name?.toLowerCase() === companyName.toLowerCase()
     );
     if (matched) {
       setContactNameInput(matched.name || '');
@@ -177,9 +193,9 @@ export default function NewInvoicePage() {
       return existing.id;
     }
 
-    const newCustomer = await InvoiceService.createCustomer({
+    const newCustomer = await QuotationService.createCustomer({
       company_name: trimmedCompany,
-      name: trimmedPerson || '', 
+      name: trimmedPerson || '',
     });
 
     return newCustomer.id;
@@ -206,7 +222,7 @@ export default function NewInvoicePage() {
     });
   };
 
-  const saveInvoice = async (printAfterSave = false) => {
+  const saveQuotation = async (printAfterSave = false) => {
     setErrorMessage('');
     if (!companyInput.trim()) {
       setErrorMessage('Please enter or select a customer company name.');
@@ -222,10 +238,10 @@ export default function NewInvoicePage() {
       const finalPaymentTerms = paymentTermsOption === 'Custom' ? customPaymentTerms : paymentTermsOption;
 
       const payload = {
-        invoice_number: invoiceNumber,
+        quotation_number: quotationNumber,
         customer_id: customerId,
         payment_terms: finalPaymentTerms,
-        requires_customer_signature: requiresCustomerSignature,
+        valid_until: validUntil || null,
         total_qty: totalQty,
         subtotal_amount: subtotalAmount,
         less_amount: lessAmount,
@@ -233,13 +249,13 @@ export default function NewInvoicePage() {
         items,
       };
 
-      const savedInvoice = editId
-        ? await InvoiceService.updateInvoice(editId, payload)
-        : await InvoiceService.createInvoice(payload);
+      const saved = editId
+        ? await QuotationService.updateQuotation(editId, payload)
+        : await QuotationService.createQuotation(payload);
 
-      router.push(`/invoices/${savedInvoice.id}${printAfterSave ? '?print=1' : ''}`);
+      router.push(`/quotations/${saved.id}${printAfterSave ? '?print=1' : ''}`);
     } catch (error: unknown) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to save invoice.');
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save quotation.');
     } finally {
       setSaving(false);
     }
@@ -247,7 +263,7 @@ export default function NewInvoicePage() {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await saveInvoice();
+    await saveQuotation();
   };
 
   return (
@@ -256,16 +272,16 @@ export default function NewInvoicePage() {
         <div className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
-              {t.navigation.invoices} / {editId ? 'Edit' : 'Create'}
+              Quotations / {editId ? 'Edit' : 'Create'}
             </p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-              {editId ? `Edit Invoice (${invoiceNumber})` : t.invoice.newTitle}
+              {editId ? `Edit Quotation (${quotationNumber})` : 'Create New Quotation'}
             </h1>
-            <p className="mt-2 max-w-xl text-sm text-slate-500">{t.invoice.prepare}</p>
+            <p className="mt-2 max-w-xl text-sm text-slate-500">Prepare price estimation for your client.</p>
           </div>
           <div className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{t.invoice.invoiceNumber}</p>
-            <p className="mt-1 text-lg font-bold">{invoiceNumber}</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Quotation No.</p>
+            <p className="mt-1 text-lg font-bold">{quotationNumber}</p>
           </div>
         </div>
 
@@ -275,17 +291,19 @@ export default function NewInvoicePage() {
             onClick={() => setPreviewOpen(true)}
             className="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
           >
-            {t.invoice.preview}
+            Preview
           </button>
         </div>
 
-        {errorMessage && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700">{errorMessage}</p>}
+        {errorMessage && (
+          <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700">{errorMessage}</p>
+        )}
 
         <form className="space-y-5" onSubmit={submit}>
-          {/* Flexi Customer Input Block */}
+          {/* Customer & Terms */}
           <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold">{t.invoice.customer} Details</h2>
+              <h2 className="text-lg font-bold">Customer & Payment Terms</h2>
               <span className="text-xs text-slate-500">Auto-saves new customers automatically</span>
             </div>
 
@@ -359,34 +377,38 @@ export default function NewInvoicePage() {
                 )}
               </div>
             </div>
+          </section>
 
-            {/* Customer Signature Option */}
-            <div className="mt-5 border-t border-slate-100 pt-4">
-              <label htmlFor="requires-signature" className="inline-flex cursor-pointer items-center gap-3">
+          {/* Quotation Specific Fields */}
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+            <h2 className="mb-3 text-lg font-bold">Quotation Specific Details</h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className="block text-sm font-bold text-slate-700" htmlFor="valid-date">
+                  Valid Until Date
+                </label>
                 <input
-                  id="requires-signature"
-                  type="checkbox"
-                  checked={requiresCustomerSignature}
-                  onChange={(e) => setRequiresCustomerSignature(e.target.checked)}
-                  className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  id="valid-date"
+                  type="date"
+                  className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  value={validUntil}
+                  onChange={(e) => setValidUntil(e.target.value)}
+                  disabled={loading}
                 />
-                <span className="text-sm font-semibold text-slate-700">
-                  Require Customer Signature Column on Printable Invoice
-                </span>
-              </label>
+              </div>
             </div>
           </section>
 
           {/* Line Items */}
-          <section id="common-specifications" className="scroll-mt-5 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-bold">{t.invoice.items}</h2>
+              <h2 className="text-xl font-bold">Quotation Items</h2>
               <button
                 type="button"
                 className="min-h-11 rounded-xl bg-blue-50 px-4 font-semibold text-blue-700 hover:bg-blue-100"
                 onClick={() => setItems((current) => [...current, emptyItem(Date.now())])}
               >
-                + {t.invoice.addItem}
+                + Add Item
               </button>
             </div>
 
@@ -399,7 +421,9 @@ export default function NewInvoicePage() {
                       <button
                         type="button"
                         className="text-sm font-semibold text-red-600 hover:underline"
-                        onClick={() => setItems((current) => current.filter((candidate) => candidate.key !== item.key))}
+                        onClick={() =>
+                          setItems((current) => current.filter((candidate) => candidate.key !== item.key))
+                        }
                       >
                         Remove
                       </button>
@@ -407,13 +431,13 @@ export default function NewInvoicePage() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                     <label className="text-sm font-semibold sm:col-span-2 lg:col-span-2">
-                      {t.invoice.productSpecification}
+                      Product / Specification
                       <select
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 font-normal"
                         value={item.product_id ?? ''}
                         onChange={(event) => selectProduct(item.key, event.target.value)}
                       >
-                        <option value="">{t.invoice.customItem}</option>
+                        <option value="">Custom Item</option>
                         {products.map((product) => {
                           const id = getRecordValue(product, ['id']);
                           return (
@@ -427,12 +451,12 @@ export default function NewInvoicePage() {
                         className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
                         value={item.description}
                         onChange={(event) => updateItem(item.key, { description: event.target.value })}
-                        placeholder={t.invoice.itemDescription}
+                        placeholder="Item description"
                         required
                       />
                     </label>
                     <label className="text-sm font-semibold">
-                      {t.invoice.qty}
+                      Qty
                       <input
                         type="number"
                         min="1"
@@ -454,7 +478,7 @@ export default function NewInvoicePage() {
                       />
                     </label>
                     <label className="text-sm font-semibold">
-                      {t.invoice.unitPriceShort}
+                      Unit Price
                       <input
                         type="number"
                         min="0"
@@ -480,11 +504,11 @@ export default function NewInvoicePage() {
           {/* Amount Summary */}
           <section className="rounded-2xl bg-slate-900 p-5 text-white shadow-sm sm:ml-auto sm:max-w-md sm:p-6">
             <div className="flex justify-between border-b border-slate-700 pb-3">
-              <span>{t.invoice.quantity}</span>
+              <span>Total Quantity</span>
               <strong>{totalQty}</strong>
             </div>
             <div className="flex items-center justify-between gap-4 border-b border-slate-700 py-3">
-              <label htmlFor="less">{t.invoice.lessDiscount}</label>
+              <label htmlFor="less">Discount / Less</label>
               <input
                 id="less"
                 type="number"
@@ -496,7 +520,7 @@ export default function NewInvoicePage() {
               />
             </div>
             <div className="flex justify-between pt-4 text-lg">
-              <span>{t.invoice.totalDue}</span>
+              <span>Total Amount</span>
               <strong>{formatMoney(totalAmount)}</strong>
             </div>
           </section>
@@ -506,7 +530,7 @@ export default function NewInvoicePage() {
             disabled={loading || saving}
             className="min-h-14 w-full rounded-xl bg-blue-700 px-5 text-lg font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saving ? t.invoice.savingInvoice : editId ? 'Update Invoice' : t.invoice.saveInvoice}
+            {saving ? 'Saving Quotation...' : editId ? 'Update Quotation' : 'Save Quotation'}
           </button>
         </form>
       </div>
@@ -519,38 +543,51 @@ export default function NewInvoicePage() {
               <div className="invoice-paper p-5 sm:p-10">
                 <header className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-7 sm:flex-row">
                   <div className="flex items-start gap-4">
-                    {company?.logo_url && <img src={company.logo_url} alt="Company logo" className="h-16 w-16 object-contain" />}
+                    {company?.logo_url && (
+                      <img src={company.logo_url} alt="Company logo" className="h-16 w-16 object-contain" />
+                    )}
                     <div>
-                      <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-700">{company?.company_name || 'InvoiceSys'}</p>
-                      <h2 className="mt-3 text-3xl font-bold tracking-tight">
-                        {isProforma ? 'PROFORMA INVOICE' : 'INVOICE'}
-                      </h2>
+                      <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-700">
+                        {company?.company_name || 'System'}
+                      </p>
+                      <h2 className="mt-3 text-3xl font-bold tracking-tight">QUOTATION</h2>
                     </div>
                   </div>
                   <div className="sm:text-right">
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      {isProforma ? 'Proforma Invoice Number' : 'Invoice Number'}
-                    </p>
-                    <p className="mt-1 text-xl font-bold">{invoiceNumber}</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Quotation Number</p>
+                    <p className="mt-1 text-xl font-bold">{quotationNumber}</p>
                     <p className="mt-2 text-sm text-slate-500">Issued: {formatDate(new Date().toISOString())}</p>
+                    {validUntil && (
+                      <p className="mt-1 text-sm font-semibold text-amber-700">Valid Until: {formatDate(validUntil)}</p>
+                    )}
                     <p className="mt-1 text-sm text-slate-500">
                       Terms: {paymentTermsOption === 'Custom' ? customPaymentTerms : paymentTermsOption}
                     </p>
                   </div>
                 </header>
+
                 <section className="grid gap-5 border-b border-slate-200 py-6 sm:grid-cols-2">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500">From</p>
-                    <p className="mt-2 font-bold">{company?.company_name || 'InvoiceSys'}</p>
+                    <p className="mt-2 font-bold">{company?.company_name || 'System'}</p>
+                    {(company?.bank_name || company?.bank_account_no || company?.bank_account_holder) && (
+                      <div className="mt-3 text-xs text-slate-600">
+                        <p className="font-bold uppercase tracking-wider text-slate-400">Bank Details:</p>
+                        {company.bank_name && <p>Bank: {company.bank_name}</p>}
+                        {company.bank_account_holder && <p>Holder: {company.bank_account_holder}</p>}
+                        {company.bank_account_no && <p>Acc No: {company.bank_account_no}</p>}
+                      </div>
+                    )}
                   </div>
                   <div className="sm:text-right">
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Bill To</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Quotation For</p>
                     <p className="mt-2 font-bold">{companyInput || 'Customer Company'}</p>
                     {contactNameInput && contactNameInput.trim() !== companyInput.trim() && (
                       <p className="text-sm text-slate-500">Attn: {contactNameInput}</p>
                     )}
                   </div>
                 </section>
+
                 <div className="overflow-x-auto py-6">
                   <table className="w-full min-w-[500px] text-left text-sm">
                     <thead className="border-b-2 border-slate-900">
@@ -565,7 +602,9 @@ export default function NewInvoicePage() {
                       {items.map((item) => (
                         <tr key={item.key}>
                           <td className="py-3 font-medium">{item.description || 'Item description'}</td>
-                          <td className="py-3 text-right">{item.qty} {item.unit || 'pcs'}</td>
+                          <td className="py-3 text-right">
+                            {item.qty} {item.unit || 'pcs'}
+                          </td>
                           <td className="py-3 text-right">{formatMoney(item.unit_price)}</td>
                           <td className="py-3 text-right font-semibold">{formatMoney(item.subtotal)}</td>
                         </tr>
@@ -573,6 +612,7 @@ export default function NewInvoicePage() {
                     </tbody>
                   </table>
                 </div>
+
                 <section className="ml-auto max-w-sm border-t border-slate-200 pt-4">
                   <div className="flex justify-between py-2 text-sm">
                     <span className="text-slate-500">Subtotal</span>
@@ -583,26 +623,40 @@ export default function NewInvoicePage() {
                     <span className="font-semibold">-{formatMoney(lessAmount)}</span>
                   </div>
                   <div className="mt-2 flex justify-between border-t-2 border-slate-900 pt-3 text-lg">
-                    <span className="font-bold">Total Payable</span>
+                    <span className="font-bold">Total Amount</span>
                     <span className="font-bold">{formatMoney(totalAmount)}</span>
                   </div>
                 </section>
+
+                {/* Preview Modal 底部条款与签名区 */}
+                <section className="mt-8 grid grid-cols-2 gap-8 border-t border-slate-200 pt-6 text-xs text-slate-500">
+                  <div>
+                    <p className="font-bold text-slate-700">Terms & Conditions:</p>
+                    <p className="mt-1">1. Goods/Services as per specified quotation.</p>
+                    <p>2. Validity: {validUntil ? formatDate(validUntil) : '30 Days from issue date'}.</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="ml-auto h-12 w-36 border-b border-slate-300"></div>
+                    <p className="mt-2 font-bold text-slate-700">Authorized Signature</p>
+                  </div>
+                </section>
               </div>
+
               <div className="no-print flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => setPreviewOpen(false)}
                   className="min-h-11 rounded-xl bg-white px-5 text-sm font-bold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
                 >
-                  {t.invoice.close}
+                  Close
                 </button>
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => void saveInvoice(true)}
+                  onClick={() => void saveQuotation(true)}
                   className="min-h-11 rounded-xl bg-blue-700 px-5 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-60"
                 >
-                  {saving ? t.invoice.savingInvoice : t.invoice.savePrint}
+                  {saving ? 'Saving...' : 'Save & Print'}
                 </button>
               </div>
             </div>

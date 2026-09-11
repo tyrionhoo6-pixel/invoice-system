@@ -19,6 +19,7 @@ export default function SiteHeader() {
   const { locale, toggleLocale, t } = useLanguage();
   const links = [
     { href: '/', label: t.navigation.dashboard },
+    { href: '/quotations', label: 'Quotations' },
     { href: '/invoices', label: t.navigation.invoices },
     { href: '/customers', label: t.navigation.customers },
     { href: '/settings', label: 'Settings' },
