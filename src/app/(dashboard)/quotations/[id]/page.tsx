@@ -131,17 +131,19 @@ export default function QuotationDetailPage() {
     const amount = formatMoney(quotation.total_amount);
     const link = `${window.location.origin}/quotations/${quotation.id}`;
 
-    const element = document.querySelector('article.invoice-paper');
+    // 修复点：明确节点类型为 HTMLElement
+    const element = document.querySelector<HTMLElement>('article.invoice-paper');
     if (element) {
       try {
-        // @ts-expect-error html2pdf.js does not provide native TS declarations
+        // 修复点：移除 // @ts-expect-error
         const html2pdf = (await import('html2pdf.js')).default;
         const opt = {
           margin: 0.3,
           filename: `${buildQuotationFileBaseName(quotation)}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
+          // 修复点：添加 as const 明确字面量类型
+          image: { type: 'jpeg' as const, quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
         };
         await html2pdf().set(opt).from(element).save();
       } catch (err) {

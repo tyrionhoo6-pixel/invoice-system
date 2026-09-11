@@ -102,17 +102,19 @@ export default function InvoiceDetailPage() {
     const amount = formatMoney(invoice.total_amount);
     const link = `${window.location.origin}/invoices/${invoice.id}`;
 
-    const element = document.querySelector('article.invoice-paper');
+    // 修复点：添加 <HTMLElement> 明确节点类型
+    const element = document.querySelector<HTMLElement>('article.invoice-paper');
     if (element) {
       try {
-        // @ts-expect-error html2pdf.js does not provide native TS declarations
+        // 修复点：删除了 // @ts-expect-error
         const html2pdf = (await import('html2pdf.js')).default;
         const opt = {
           margin: 0.3,
           filename: `${buildInvoiceFileBaseName(invoice)}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
+          // 修复点：添加 as const 限制类型
+          image: { type: 'jpeg' as const, quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
         };
         await html2pdf().set(opt).from(element).save();
       } catch (err) {
