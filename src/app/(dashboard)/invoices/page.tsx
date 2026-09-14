@@ -596,8 +596,8 @@ export default function InvoicesPage() {
           aria-modal="true"
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 className="text-xl font-bold">{t.invoice.confirmDelete}</h2>
-            <p className="mt-2 text-sm text-slate-500">{t.invoice.confirmDeleteDescription}</p>
+<h2 className="text-xl font-bold">Delete Invoice</h2>
+<p className="mt-2 text-sm text-slate-500">Are you sure you want to delete this invoice? This action cannot be undone.</p>
             <p className="mt-3 font-semibold">{deletingInvoice.invoice_number}</p>
             <div className="mt-6 flex justify-end gap-2">
               <button
@@ -613,7 +613,7 @@ export default function InvoicesPage() {
                 disabled={deleting}
                 className="min-h-11 rounded-xl bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-60"
               >
-                {deleting ? t.invoice.deleting : t.invoice.delete}
+                {deleting ? 'Deleting...' : t.invoice.delete}
               </button>
             </div>
           </div>
