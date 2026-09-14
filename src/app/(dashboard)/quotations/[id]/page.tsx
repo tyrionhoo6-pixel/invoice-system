@@ -33,7 +33,7 @@ export default function QuotationDetailPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [company, setCompany] = useState<CompanySettings | null>(null);
 
-  // 1. 加载数据并增加卸载防护
+  // 1. Fetch initial quotation and company settings with unmount protection
   useEffect(() => {
     let isMounted = true;
 
@@ -70,7 +70,7 @@ export default function QuotationDetailPage() {
     };
   }, [params.id]);
 
-  // 2. 自动打印处理
+  // 2. Handle automatic print trigger from query parameters
   useEffect(() => {
     if (!loading && quotation && searchParams.get('print') === '1') {
       const printTimer = window.setTimeout(() => window.print(), 250);
@@ -79,7 +79,7 @@ export default function QuotationDetailPage() {
     return undefined;
   }, [quotation, loading, searchParams]);
 
-  // 3. 状态更变
+  // 3. Update quotation status
   const changeStatus = async (status: 'accepted' | 'rejected' | 'pending') => {
     if (!quotation) return;
     setSavingStatus(true);
@@ -94,7 +94,7 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // 4. 转为 Invoice
+  // 4. Convert quotation to invoice
   const handleConvertToInvoice = async () => {
     if (!quotation) return;
     setConverting(true);
@@ -108,7 +108,7 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // 5. 转为 Proforma
+  // 5. Convert quotation to proforma invoice
   const handleConvertToProforma = async () => {
     if (!quotation) return;
     setConverting(true);
@@ -122,7 +122,7 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // 6. WhatsApp 分享并自动生成 PDF
+  // 6. Share quotation via WhatsApp with auto-generated PDF attachment
   const shareViaWhatsApp = async () => {
     if (!quotation) return;
 
@@ -131,20 +131,18 @@ export default function QuotationDetailPage() {
     const amount = formatMoney(quotation.total_amount);
     const link = `${window.location.origin}/quotations/${quotation.id}`;
 
-    // 修复点：明确节点类型为 HTMLElement
     const element = document.querySelector<HTMLElement>('article.invoice-paper');
     if (element) {
-try {
-  const html2pdf = (await import('html2pdf.js')).default;
-  const opt = {
-    margin: 0.3,
-    filename: `${buildQuotationFileBaseName(quotation)}.pdf`,
-    image: { type: 'jpeg' as const, quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
-  };
-  await html2pdf().set(opt).from(element as HTMLElement).save();
-}
+      try {
+        const html2pdf = (await import('html2pdf.js')).default;
+        const opt = {
+          margin: 0.3,
+          filename: `${buildQuotationFileBaseName(quotation)}.pdf`,
+          image: { type: 'jpeg' as const, quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
+        };
+        await html2pdf().set(opt).from(element as HTMLElement).save();
       } catch (err) {
         console.error('Failed to generate PDF:', err);
       } finally {
@@ -160,7 +158,7 @@ try {
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // 7. 动态设置文档标题并调用系统打印
+  // 7. Dynamically set document title for printing and open browser print window
   const printQuotation = () => {
     if (!quotation) {
       window.print();
@@ -174,7 +172,7 @@ try {
     }, 500);
   };
 
-  // 8. 复制当前 Quotation
+  // 8. Duplicate current quotation as a draft
   const duplicateQuotation = () => {
     if (!quotation) return;
 
@@ -219,7 +217,7 @@ try {
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
-      {/* 顶部控制按钮区 */}
+      {/* Top action button toolbar */}
       <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
         <Link href="/quotations" className="text-sm font-bold text-slate-600 hover:text-blue-700">
           ← Back to Quotations
@@ -278,7 +276,7 @@ try {
         </p>
       )}
 
-      {/* 单据打印与渲染卡片 */}
+      {/* Quotation printable document card */}
       <article className="invoice-paper mx-auto max-w-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-10">
         <header className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-6 sm:flex-row">
           <div className="flex items-start gap-4">
@@ -337,7 +335,7 @@ try {
           </div>
         </section>
 
-        {/* 明细列表 */}
+        {/* Line items section */}
         <section className="py-6">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">
@@ -363,7 +361,7 @@ try {
           </div>
         </section>
 
-        {/* 汇总计算 */}
+        {/* Summary calculations section */}
         <section className="ml-auto max-w-sm border-t border-slate-200 pt-4">
           <div className="flex justify-between py-1.5 text-sm">
             <span className="text-slate-500">Subtotal</span>
@@ -379,7 +377,7 @@ try {
           </div>
         </section>
 
-        {/* 页脚与签名区 */}
+        {/* Footer and authorization signature section */}
         <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500">
           <p>Thank you for your business.</p>
           <p className="mt-1 font-medium text-slate-700">
@@ -439,7 +437,7 @@ try {
           </div>
         </footer>
 
-        {/* 网页显示状态与快速更改按钮 */}
+        {/* Status indicator and quick status update controls */}
         <div className="no-print mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
           <div>
             <span className="text-sm font-semibold text-slate-500">Status: </span>
