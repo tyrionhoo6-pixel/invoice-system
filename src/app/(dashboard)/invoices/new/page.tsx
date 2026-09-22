@@ -141,11 +141,11 @@ function InvoiceFormContent() {
           }
         }
       } catch (error: unknown) {
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
-      } finally {
-        setLoading(false);
-      }
-    };
+              setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
+            } finally {
+              setLoading(false);
+            }
+          };
 
     void initializeForm();
   }, [editId]);
@@ -454,13 +454,13 @@ function InvoiceFormContent() {
                     <label className="text-sm font-semibold">
                       {t.invoice.unitPriceShort}
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        placeholder="0.00"
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
-                        value={item.unit_price}
-                        onChange={(event) => updateItem(item.key, { unit_price: Number(event.target.value) || 0 })}
-                        required
+                        value={item.unit_price === 0 ? '' : item.unit_price}
+                        onChange={(event) => {
+                          const val = event.target.value === '' ? 0 : parseFloat(event.target.value);
+                          updateItem(item.key, { unit_price: isNaN(val) ? 0 : val });
+                        }}
                       />
                     </label>
                     <div className="text-sm font-semibold">
@@ -485,12 +485,13 @@ function InvoiceFormContent() {
               <label htmlFor="less">{t.invoice.lessDiscount}</label>
               <input
                 id="less"
-                type="number"
-                min="0"
-                step="0.01"
-                className="min-h-11 w-32 rounded-lg bg-white px-3 text-right text-slate-900"
-                value={lessAmount}
-                onChange={(event) => setLessAmount(Number(event.target.value) || 0)}
+                placeholder="0.00"
+                className="min-h-11 w-32 rounded-lg bg-white px-3 text-right text-slate-900 font-normal outline-none focus:ring-2 focus:ring-blue-500"
+                value={lessAmount === 0 ? '' : lessAmount}
+                onChange={(event) => {
+                  const val = event.target.value === '' ? 0 : parseFloat(event.target.value);
+                  setLessAmount(isNaN(val) ? 0 : val);
+                }}
               />
             </div>
             <div className="flex justify-between pt-4 text-lg">

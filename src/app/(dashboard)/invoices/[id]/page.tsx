@@ -194,6 +194,74 @@ export default function InvoiceDetailPage() {
 
   return (
     <main className="min-h-screen w-full overflow-x-hidden bg-slate-100 px-3 py-6 text-slate-900 sm:px-6 lg:px-8">
+      {/* 全局打印/PDF 样式修复 */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 0;
+          }
+
+          html, body {
+            width: 210mm !important;
+            height: auto !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          .no-print, nav, header, button {
+            display: none !important;
+          }
+
+          /* 强制将卡片设为标准的 A4 794px 宽，防止移动端缩窄变形 */
+          .invoice-paper {
+            width: 794px !important;
+            max-width: 794px !important;
+            min-width: 794px !important;
+            margin: 0 auto !important;
+            padding: 32px !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: white !important;
+          }
+
+          /* 强制解决移动端 flex-col 换行导致的断页问题 */
+          .invoice-paper header {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+          }
+
+          .invoice-paper section.grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .invoice-paper table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+          }
+
+          .invoice-paper footer > div {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+          }
+
+          /* 防止关键节点在中间跨页断开 */
+          section, table, tr, footer {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
       {/* Header Actions */}
       <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
         <Link href="/invoices" className="text-sm font-bold text-slate-600 hover:text-blue-700">
