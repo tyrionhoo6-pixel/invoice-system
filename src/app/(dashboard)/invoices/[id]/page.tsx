@@ -90,52 +90,77 @@ export default function InvoiceDetailPage() {
     }
   };
 
+  // 改进后的原生 PDF 文件分享函数
   const shareViaWhatsApp = async () => {
     if (!invoice) return;
 
     setGeneratingPdf(true);
-    const customerName = invoice.customer?.company_name || invoice.customer?.name || 'Customer';
-    const amount = formatMoney(invoice.total_amount);
-    const link = `${window.location.origin}/invoices/${invoice.id}`;
-
+    const fileName = `${buildInvoiceFileBaseName(invoice)}.pdf`;
     const element = document.querySelector<HTMLElement>('article.invoice-paper');
-    if (element) {
-      const originalWidth = element.style.width;
-      element.style.width = '794px';
 
-      try {
-        const html2pdf = (await import('html2pdf.js')).default;
-        const opt: Record<string, unknown> = {
-          margin: [0.2, 0.2, 0.2, 0.2],
-          filename: `${buildInvoiceFileBaseName(invoice)}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            windowWidth: 1200,
-          },
-          jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        };
-        await html2pdf().set(opt).from(element).save();
-      } catch (err) {
-        console.error('Failed to generate PDF:', err);
-      } finally {
-        element.style.width = originalWidth;
-        setGeneratingPdf(false);
-      }
-    } else {
+    if (!element) {
       setGeneratingPdf(false);
+      return;
     }
 
-    const isProforma = invoice.invoice_type === 'proforma';
-    const docTypeName = isProforma ? 'proforma invoice' : 'invoice';
+    const originalWidth = element.style.width;
+    element.style.width = '794px';
 
-    const message = `Hello ${customerName}, here is your ${docTypeName} ${invoice.invoice_number} for total ${amount}.\n\nYou can also view it online: ${link}`;
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    try {
+      // 1. 使用 html2pdf 生成 PDF 内存 Blob
+      const html2pdf = (await import('html2pdf.js')).default;
+      const opt: Record<string, unknown> = {
+        margin: [0.2, 0.2, 0.2, 0.2],
+        filename: fileName,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          windowWidth: 1200,
+        },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      };
 
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      const pdfBlob: Blob = await html2pdf().set(opt).from(element).output('blob');
+
+      // 2. 将 Blob 转为真实的 File 对象
+      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      const customerName = invoice.customer?.company_name || invoice.customer?.name || 'Customer';
+      const isProforma = invoice.invoice_type === 'proforma';
+      const docTypeName = isProforma ? 'proforma invoice' : 'invoice';
+      const shareMessage = `Hello ${customerName}, here is your ${docTypeName} ${invoice.invoice_number}.`;
+
+      // 3. 检查设备是否支持原生文件分享（Android & iOS 手机原生支持）
+      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: fileName,
+          text: shareMessage,
+        });
+      } else {
+        // 桌面端降级方案：自动下载 PDF，并尝试打开网页版 WhatsApp
+        const downloadUrl = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+
+        const onlineLink = `${window.location.origin}/invoices/${invoice.id}`;
+        const fallbackMessage = `${shareMessage}\n\nView online: ${onlineLink}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackMessage)}`, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Failed to share PDF:', err);
+      }
+    } finally {
+      element.style.width = originalWidth;
+      setGeneratingPdf(false);
+    }
   };
 
   const printInvoice = () => {
