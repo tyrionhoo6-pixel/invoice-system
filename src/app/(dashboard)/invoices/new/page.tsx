@@ -140,11 +140,11 @@ function InvoiceFormContent() {
             sessionStorage.removeItem('invoice-duplicate-draft');
           }
         }
-      } catch (error: unknown) {
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
-      } finally {
-        setLoading(false);
-      }
+    } catch (error: unknown) {
+            setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
+          } finally {
+            setLoading(false);
+          }
     };
 
     void initializeForm();
@@ -430,17 +430,19 @@ function InvoiceFormContent() {
                       />
                     </label>
 
-                    {/* Qty 数量：使用 inputMode="numeric" */}
+                    {/* Quantity Field */}
                     <label className="text-sm font-semibold">
                       {t.invoice.qty}
                       <input
-                        type="number"
-                        inputMode="numeric"
-                        min="1"
-                        step="1"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="1"
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
-                        value={item.qty}
-                        onChange={(event) => updateItem(item.key, { qty: Number(event.target.value) || 0 })}
+                        value={item.qty === 0 ? '' : item.qty}
+                        onChange={(event) => {
+                          const val = event.target.value === '' ? 0 : parseFloat(event.target.value);
+                          updateItem(item.key, { qty: isNaN(val) ? 0 : val });
+                        }}
                         required
                       />
                     </label>
@@ -456,7 +458,7 @@ function InvoiceFormContent() {
                       />
                     </label>
 
-                    {/* Unit Price 单价：使用 inputMode="decimal" */}
+                    {/* Unit Price Field */}
                     <label className="text-sm font-semibold">
                       {t.invoice.unitPriceShort}
                       <input
@@ -491,7 +493,7 @@ function InvoiceFormContent() {
               <strong>{totalQty}</strong>
             </div>
 
-            {/* Less Discount 折扣：使用 inputMode="decimal" */}
+            {/* Less Discount Field */}
             <div className="flex items-center justify-between gap-4 border-b border-slate-700 py-3">
               <label htmlFor="less">{t.invoice.lessDiscount}</label>
               <input

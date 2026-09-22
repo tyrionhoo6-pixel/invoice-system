@@ -109,9 +109,10 @@ export default function NewQuotationPage() {
             }
 
             if (existing.quotation_items && existing.quotation_items.length > 0) {
+              const baseTime = Date.now();
               setItems(
                 existing.quotation_items.map((item, idx) => ({
-                  key: Date.now() + idx,
+                  key: baseTime + idx,
                   product_id: item.product_id ?? null,
                   description: item.product_name || '',
                   qty: Number(item.quantity) || 1,
@@ -138,11 +139,12 @@ export default function NewQuotationPage() {
             }
             if (draft.validUntil) setValidUntil(draft.validUntil);
 
+            const baseTime = Date.now();
             setItems(
               draft.items.map((item, index) => ({
                 ...item,
                 unit: item.unit || 'pcs',
-                key: Date.now() + index,
+                key: baseTime + index,
               }))
             );
             setLessAmount(draft.lessAmount);
@@ -455,9 +457,14 @@ export default function NewQuotationPage() {
                         min="1"
                         step="1"
                         inputMode="numeric"
+                        placeholder="1"
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
-                        value={item.qty}
-                        onChange={(event) => updateItem(item.key, { qty: Number(event.target.value) || 0 })}
+                        value={item.qty === 0 ? '' : item.qty}
+                        onFocus={(event) => event.target.select()}
+                        onChange={(event) => {
+                          const val = event.target.value === '' ? 0 : parseInt(event.target.value, 10);
+                          updateItem(item.key, { qty: isNaN(val) ? 0 : val });
+                        }}
                         required
                       />
                     </label>
