@@ -32,7 +32,7 @@ export default function InvoiceDetailPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [company, setCompany] = useState<CompanySettings | null>(null);
 
-  // 1. 加载发票和公司数据（带组件卸载防护）
+  // Load invoice and company settings
   useEffect(() => {
     let isMounted = true;
 
@@ -69,7 +69,7 @@ export default function InvoiceDetailPage() {
     };
   }, [params.id]);
 
-  // 2. 自动触发打印 Query 参数处理
+  // Handle auto-print query parameter
   useEffect(() => {
     if (!loading && invoice && searchParams.get('print') === '1') {
       const printTimer = window.setTimeout(() => window.print(), 250);
@@ -78,7 +78,7 @@ export default function InvoiceDetailPage() {
     return undefined;
   }, [invoice, loading, searchParams]);
 
-  // 3. 快捷更改发票状态
+  // Update invoice status
   const changeStatus = async (status: 'paid' | 'unpaid') => {
     if (!invoice) return;
     setSavingStatus(true);
@@ -93,7 +93,7 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  // 4. WhatsApp 分享并导出 PDF
+  // Generate PDF and share via WhatsApp
   const shareViaWhatsApp = async () => {
     if (!invoice) return;
 
@@ -102,24 +102,32 @@ export default function InvoiceDetailPage() {
     const amount = formatMoney(invoice.total_amount);
     const link = `${window.location.origin}/invoices/${invoice.id}`;
 
-    // 修复点：添加 <HTMLElement> 明确节点类型
     const element = document.querySelector<HTMLElement>('article.invoice-paper');
     if (element) {
+      // Lock element width to standard viewport temporarily to avoid mobile layout distortion
+      const originalWidth = element.style.width;
+      element.style.width = '794px';
+
       try {
-        // 修复点：删除了 // @ts-expect-error
         const html2pdf = (await import('html2pdf.js')).default;
-        const opt = {
-          margin: 0.3,
+        const opt: Record<string, unknown> = {
+          margin: [0.2, 0.2, 0.2, 0.2],
           filename: `${buildInvoiceFileBaseName(invoice)}.pdf`,
-          // 修复点：添加 as const 限制类型
-          image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            windowWidth: 1200,
+          },
+          jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
         };
         await html2pdf().set(opt).from(element).save();
       } catch (err) {
         console.error('Failed to generate PDF:', err);
       } finally {
+        element.style.width = originalWidth;
         setGeneratingPdf(false);
       }
     } else {
@@ -135,7 +143,7 @@ export default function InvoiceDetailPage() {
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // 5. 打印发票（自动修改并还原 document.title 以改变浏览器保存文件名）
+  // Print invoice
   const printInvoice = () => {
     if (!invoice) {
       window.print();
@@ -149,7 +157,7 @@ export default function InvoiceDetailPage() {
     }, 500);
   };
 
-  // 6. 复制发票草稿并跳转
+  // Duplicate invoice draft and redirect
   const duplicateInvoice = () => {
     if (!invoice) return;
     sessionStorage.setItem(
@@ -193,7 +201,36 @@ export default function InvoiceDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
-      {/* 顶部按钮区域 (打印时自动隐藏) */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+          body {
+            background: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .invoice-paper {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          tr, section, footer {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
+      {/* Header Actions Area */}
       <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
         <Link href="/invoices" className="text-sm font-bold text-slate-600 hover:text-blue-700">
           ← {t.invoice.backToInvoices}
@@ -248,7 +285,7 @@ export default function InvoiceDetailPage() {
         </p>
       )}
 
-      {/* 发票单据主体 */}
+      {/* Invoice Main Content */}
       <article className="invoice-paper mx-auto max-w-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-10">
         <header className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-6 sm:flex-row">
           <div className="flex items-start gap-4">
@@ -319,7 +356,7 @@ export default function InvoiceDetailPage() {
           </div>
         </section>
 
-        {/* 明细表格 */}
+        {/* Item Table */}
         <section className="py-6">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">
@@ -345,7 +382,7 @@ export default function InvoiceDetailPage() {
           </div>
         </section>
 
-        {/* 费用结算 */}
+        {/* Calculations */}
         <section className="ml-auto max-w-sm border-t border-slate-200 pt-4">
           <div className="flex justify-between py-1.5 text-sm">
             <span className="text-slate-500">Subtotal</span>
@@ -361,7 +398,7 @@ export default function InvoiceDetailPage() {
           </div>
         </section>
 
-        {/* 页脚与签名区域 */}
+        {/* Footer & Signature Section */}
         <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500">
           <p>Thank you for your business.</p>
           <p className="mt-1 font-medium text-slate-700">
