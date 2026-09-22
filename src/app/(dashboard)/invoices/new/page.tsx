@@ -141,11 +141,11 @@ function InvoiceFormContent() {
           }
         }
       } catch (error: unknown) {
-              setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
-            } finally {
-              setLoading(false);
-            }
-          };
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
     void initializeForm();
   }, [editId]);
@@ -429,10 +429,13 @@ function InvoiceFormContent() {
                         required
                       />
                     </label>
+
+                    {/* Qty 数量：使用 inputMode="numeric" */}
                     <label className="text-sm font-semibold">
                       {t.invoice.qty}
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
                         step="1"
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
@@ -441,6 +444,7 @@ function InvoiceFormContent() {
                         required
                       />
                     </label>
+
                     <label className="text-sm font-semibold">
                       Unit
                       <input
@@ -451,9 +455,13 @@ function InvoiceFormContent() {
                         placeholder="pcs / lot"
                       />
                     </label>
+
+                    {/* Unit Price 单价：使用 inputMode="decimal" */}
                     <label className="text-sm font-semibold">
                       {t.invoice.unitPriceShort}
                       <input
+                        type="text"
+                        inputMode="decimal"
                         placeholder="0.00"
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
                         value={item.unit_price === 0 ? '' : item.unit_price}
@@ -463,6 +471,7 @@ function InvoiceFormContent() {
                         }}
                       />
                     </label>
+
                     <div className="text-sm font-semibold">
                       Subtotal
                       <p className="mt-1 flex min-h-11 items-center rounded-lg bg-slate-200 px-3 text-base font-bold">
@@ -481,12 +490,16 @@ function InvoiceFormContent() {
               <span>{t.invoice.quantity}</span>
               <strong>{totalQty}</strong>
             </div>
+
+            {/* Less Discount 折扣：使用 inputMode="decimal" */}
             <div className="flex items-center justify-between gap-4 border-b border-slate-700 py-3">
               <label htmlFor="less">{t.invoice.lessDiscount}</label>
               <input
                 id="less"
+                type="text"
+                inputMode="decimal"
                 placeholder="0.00"
-                className="min-h-11 w-32 rounded-lg bg-white px-3 text-right text-slate-900 font-normal outline-none focus:ring-2 focus:ring-blue-500"
+                className="min-h-11 w-32 rounded-lg bg-white px-3 text-right font-normal text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
                 value={lessAmount === 0 ? '' : lessAmount}
                 onChange={(event) => {
                   const val = event.target.value === '' ? 0 : parseFloat(event.target.value);
