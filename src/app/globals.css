@@ -26,23 +26,26 @@ select {
   font: inherit;
 }
 
-/* 打印专用 CSS 优化 */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 0; 
+    margin: 10mm; 
   }
 
-  /* 打印时强行隐藏页面上除了发票主体外的所有非打印元素 */
+
   body * {
     visibility: hidden;
   }
 
-  .invoice-paper, .invoice-paper * {
+  .invoice-paper,
+  .invoice-paper *,
+  .quotation-paper,
+  .quotation-paper * {
     visibility: visible;
   }
 
-  .invoice-paper {
+  .invoice-paper,
+  .quotation-paper {
     position: absolute;
     left: 0;
     top: 0;
@@ -51,15 +54,15 @@ select {
     box-shadow: none !important;
     border: none !important;
     border-radius: 0 !important;
-    padding: 15mm 15mm !important;
-    margin: 0 auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   html,
   body {
     background: #ffffff !important;
-    width: 210mm !important;
-    height: 297mm !important;
+    width: 100% !important;
+    height: auto !important; /* 关键：改为 auto，切勿固定 297mm */
     margin: 0 !important;
     padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
@@ -71,7 +74,10 @@ select {
     display: none !important;
   }
 
-  tr, section, footer, header {
+  tr,
+  section,
+  footer,
+  header {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }

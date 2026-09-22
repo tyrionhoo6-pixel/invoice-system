@@ -48,15 +48,6 @@ export default function QuotationsPage() {
     });
   }, [quotations, query, status, month]);
 
-  const handleStatusChange = async (id: string, nextStatus: QuotationStatus) => {
-    try {
-      await QuotationService.updateQuotationStatus(id, nextStatus);
-      setQuotations((curr) => curr.map((q) => (q.id === id ? { ...q, status: nextStatus } : q)));
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to update status.');
-    }
-  };
-
   const handleConvertToInvoice = async (id: string) => {
     setConvertingId(id);
     try {
@@ -150,59 +141,115 @@ export default function QuotationsPage() {
             <p className="text-slate-500">No quotations found.</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="p-4">Quotation No.</th>
-                    <th className="p-4">Customer</th>
-                    <th className="p-4">Date</th>
-                    <th className="p-4 text-right">Amount</th>
-                    <th className="p-4 text-center">Status</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredQuotations.map((q) => (
-                    <tr key={q.id} className="hover:bg-slate-50">
-                      <td className="p-4 font-bold text-blue-700">{q.quotation_number}</td>
-                      <td className="p-4 font-medium">{q.customer?.company_name || q.customer?.name || 'Unknown'}</td>
-                      <td className="p-4 text-slate-500">{q.created_at ? formatDate(q.created_at) : '-'}</td>
-                      <td className="p-4 text-right font-bold">{formatMoney(q.total_amount)}</td>
-                      <td className="p-4 text-center">{getStatusBadge(q.status)}</td>
-                      <td className="p-4 text-right space-x-2">
-                        {q.status !== 'converted' && (
+          <>
+            {/* 1. Mobile Card View*/}
+            <div className="space-y-3 sm:hidden">
+              {filteredQuotations.map((q) => (
+                <div key={q.id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+                  <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <p className="font-bold text-blue-700">{q.quotation_number}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{q.created_at ? formatDate(q.created_at) : '-'}</p>
+                    </div>
+                    <div>{getStatusBadge(q.status)}</div>
+                  </div>
+
+                  <div className="my-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400">Customer</p>
+                      <p className="text-sm font-medium text-slate-800">{q.customer?.company_name || q.customer?.name || 'Unknown'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-slate-400">Amount</p>
+                      <p className="text-base font-bold text-slate-900">{formatMoney(q.total_amount)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                    {q.status !== 'converted' && (
+                      <button
+                        type="button"
+                        disabled={convertingId === q.id}
+                        onClick={() => handleConvertToInvoice(q.id)}
+                        className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                      >
+                        {convertingId === q.id ? 'Converting...' : '→ Convert'}
+                      </button>
+                    )}
+                    <Link
+                      href={`/quotations/new?id=${q.id}`}
+                      className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      type="button"
+                      disabled={deletingId === q.id}
+                      onClick={() => handleDelete(q.id)}
+                      className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 2.(Desktop Table View */}
+            <div className="hidden overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 sm:block">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="p-4">Quotation No.</th>
+                      <th className="p-4">Customer</th>
+                      <th className="p-4">Date</th>
+                      <th className="p-4 text-right">Amount</th>
+                      <th className="p-4 text-center">Status</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredQuotations.map((q) => (
+                      <tr key={q.id} className="hover:bg-slate-50">
+                        <td className="p-4 font-bold text-blue-700">{q.quotation_number}</td>
+                        <td className="p-4 font-medium">{q.customer?.company_name || q.customer?.name || 'Unknown'}</td>
+                        <td className="p-4 text-slate-500">{q.created_at ? formatDate(q.created_at) : '-'}</td>
+                        <td className="p-4 text-right font-bold">{formatMoney(q.total_amount)}</td>
+                        <td className="p-4 text-center">{getStatusBadge(q.status)}</td>
+                        <td className="p-4 text-right space-x-2">
+                          {q.status !== 'converted' && (
+                            <button
+                              type="button"
+                              disabled={convertingId === q.id}
+                              onClick={() => handleConvertToInvoice(q.id)}
+                              className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                            >
+                              {convertingId === q.id ? 'Converting...' : '→ Convert to Invoice'}
+                            </button>
+                          )}
+                          <Link
+                            href={`/quotations/new?id=${q.id}`}
+                            className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                          >
+                            Edit
+                          </Link>
                           <button
                             type="button"
-                            disabled={convertingId === q.id}
-                            onClick={() => handleConvertToInvoice(q.id)}
-                            className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                            disabled={deletingId === q.id}
+                            onClick={() => handleDelete(q.id)}
+                            className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50"
                           >
-                            {convertingId === q.id ? 'Converting...' : '→ Convert to Invoice'}
+                            Delete
                           </button>
-                        )}
-                        <Link
-                          href={`/quotations/new?id=${q.id}`}
-                          className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
-                        >
-                          Edit
-                        </Link>
-                        <button
-                          type="button"
-                          disabled={deletingId === q.id}
-                          onClick={() => handleDelete(q.id)}
-                          className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </main>
