@@ -19,6 +19,13 @@ function buildQuotationFileBaseName(quotation: QuotationWithItems): string {
   return `${customerNameForFile} - ${quotation.quotation_number}`;
 }
 
+// Helper: Dismiss mobile soft keyboard
+function dismissKeyboard() {
+  if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+}
+
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -81,6 +88,7 @@ export default function QuotationDetailPage() {
 
   // 3. Update quotation status
   const changeStatus = async (status: 'accepted' | 'rejected' | 'pending') => {
+    dismissKeyboard();
     if (!quotation) return;
     setSavingStatus(true);
     setErrorMessage('');
@@ -96,6 +104,7 @@ export default function QuotationDetailPage() {
 
   // 4. Convert quotation to invoice
   const handleConvertToInvoice = async () => {
+    dismissKeyboard();
     if (!quotation) return;
     setConverting(true);
     setErrorMessage('');
@@ -110,6 +119,7 @@ export default function QuotationDetailPage() {
 
   // 5. Convert quotation to proforma invoice
   const handleConvertToProforma = async () => {
+    dismissKeyboard();
     if (!quotation) return;
     setConverting(true);
     setErrorMessage('');
@@ -122,8 +132,9 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // 6. Share quotation via WhatsApp with auto-generated PDF attachment
+// 6. Share quotation via WhatsApp with optimized PDF generation
   const shareViaWhatsApp = async () => {
+    dismissKeyboard();
     if (!quotation) return;
 
     setGeneratingPdf(true);
@@ -133,19 +144,30 @@ export default function QuotationDetailPage() {
 
     const element = document.querySelector<HTMLElement>('article.invoice-paper');
     if (element) {
+      // Temporarily lock width to standard desktop viewport (794px A4) to prevent mobile layout distortion
+      const originalWidth = element.style.width;
+      element.style.width = '794px';
+
       try {
         const html2pdf = (await import('html2pdf.js')).default;
-        const opt = {
-          margin: 0.3,
+        const opt: Record<string, unknown> = {
+          margin: [0.2, 0.2, 0.2, 0.2], // Compact margins to prevent multi-page overflow
           filename: `${buildQuotationFileBaseName(quotation)}.pdf`,
-          image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' as const },
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            windowWidth: 1200, // Simulate desktop browser viewport
+          },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }, // Avoid slicing table rows or elements
         };
-        await html2pdf().set(opt).from(element as HTMLElement).save();
+        await html2pdf().set(opt).from(element).save();
       } catch (err) {
         console.error('Failed to generate PDF:', err);
       } finally {
+        element.style.width = originalWidth; // Restore mobile responsiveness
         setGeneratingPdf(false);
       }
     } else {
@@ -160,6 +182,7 @@ export default function QuotationDetailPage() {
 
   // 7. Dynamically set document title for printing and open browser print window
   const printQuotation = () => {
+    dismissKeyboard();
     if (!quotation) {
       window.print();
       return;
@@ -174,6 +197,7 @@ export default function QuotationDetailPage() {
 
   // 8. Duplicate current quotation as a draft
   const duplicateQuotation = () => {
+    dismissKeyboard();
     if (!quotation) return;
 
     sessionStorage.setItem(
@@ -216,13 +240,13 @@ export default function QuotationDetailPage() {
   const companyRegNo = company?.reg_no || (company as { registration_no?: string })?.registration_no || '';
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
-      {/* Top action button toolbar */}
+    <main className="min-h-screen bg-slate-100 px-4 py-6 pb-28 sm:pb-8 text-slate-900 sm:px-6 lg:px-8">
+      {/* Top action button toolbar (Desktop) */}
       <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
         <Link href="/quotations" className="text-sm font-bold text-slate-600 hover:text-blue-700">
           ← Back to Quotations
         </Link>
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden sm:flex sm:flex-wrap sm:gap-2">
           <button
             type="button"
             disabled={converting}
@@ -349,7 +373,7 @@ export default function QuotationDetailPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {(quotation.quotation_items ?? []).map((item, index) => (
-                  <tr key={item.id ?? `${item.product_name}-${index}`}>
+                  <tr key={item.id ?? `${item.product_name}-${index}`} className="break-inside-avoid">
                     <td className="py-3 font-medium">{item.product_name}</td>
                     <td className="py-3 text-right">{item.quantity}</td>
                     <td className="py-3 text-right">{formatMoney(item.unit_price)}</td>
@@ -362,7 +386,7 @@ export default function QuotationDetailPage() {
         </section>
 
         {/* Summary calculations section */}
-        <section className="ml-auto max-w-sm border-t border-slate-200 pt-4">
+        <section className="ml-auto max-w-sm border-t border-slate-200 pt-4 break-inside-avoid">
           <div className="flex justify-between py-1.5 text-sm">
             <span className="text-slate-500">Subtotal</span>
             <span className="font-semibold">{formatMoney(quotation.subtotal_amount)}</span>
@@ -378,7 +402,7 @@ export default function QuotationDetailPage() {
         </section>
 
         {/* Footer and authorization signature section */}
-        <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500">
+        <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500 break-inside-avoid">
           <p>Thank you for your business.</p>
           <p className="mt-1 font-medium text-slate-700">
             Payment Terms: {quotation.payment_terms || company?.payment_terms || '30 Days'}
@@ -478,6 +502,39 @@ export default function QuotationDetailPage() {
 
       <div className="no-print mx-auto mt-5 max-w-4xl text-center text-xs text-slate-500">
         Use your browser&apos;s print dialog to save this quotation as a PDF.
+      </div>
+
+      {/* Mobile Sticky Bottom Action Bar (Easy access on phones without keyboard obstruction) */}
+      <div className="no-print fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
+        <button
+          type="button"
+          onClick={() => void shareViaWhatsApp()}
+          disabled={generatingPdf}
+          className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {generatingPdf ? 'PDF...' : 'WhatsApp'}
+        </button>
+        <button
+          type="button"
+          disabled={converting}
+          onClick={handleConvertToInvoice}
+          className="flex-1 rounded-lg bg-blue-700 py-2.5 text-xs font-bold text-white shadow hover:bg-blue-800 disabled:opacity-50"
+        >
+          {converting ? '...' : 'Invoice'}
+        </button>
+        <Link
+          href={`/quotations/new?id=${quotation.id}`}
+          className="flex-1 text-center rounded-lg bg-slate-800 py-2.5 text-xs font-bold text-white shadow hover:bg-slate-900"
+        >
+          Edit
+        </Link>
+        <button
+          type="button"
+          onClick={printQuotation}
+          className="flex-1 rounded-lg bg-slate-900 py-2.5 text-xs font-bold text-white shadow hover:bg-slate-800"
+        >
+          Print
+        </button>
       </div>
     </main>
   );

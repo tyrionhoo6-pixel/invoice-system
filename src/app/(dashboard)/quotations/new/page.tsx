@@ -49,10 +49,8 @@ export default function NewQuotationPage() {
   const [companyInput, setCompanyInput] = useState('');
   const [contactNameInput, setContactNameInput] = useState('');
 
-  // Quotation 专属字段状态
   const [validUntil, setValidUntil] = useState('');
 
-  // Payment Terms 状态
   const [paymentTermsOption, setPaymentTermsOption] = useState('30 Days');
   const [customPaymentTerms, setCustomPaymentTerms] = useState('');
 
@@ -93,10 +91,8 @@ export default function NewQuotationPage() {
             setQuotationNumber(existing.quotation_number);
             setLessAmount(Number(existing.less_amount) || 0);
 
-            // 回显 Quotation 专属字段
             if (existing.valid_until) setValidUntil(existing.valid_until.split('T')[0]);
 
-            // 回显 Payment Terms
             if (existing.payment_terms) {
               const stdOptions = ['Cash / COD', '7 Days', '14 Days', '30 Days', '60 Days'];
               if (stdOptions.includes(existing.payment_terms)) {
@@ -300,7 +296,6 @@ export default function NewQuotationPage() {
         )}
 
         <form className="space-y-5" onSubmit={submit}>
-          {/* Customer & Terms */}
           <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold">Customer & Payment Terms</h2>
@@ -379,7 +374,6 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
-          {/* Quotation Specific Fields */}
           <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <h2 className="mb-3 text-lg font-bold">Quotation Specific Details</h2>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -399,7 +393,6 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
-          {/* Line Items */}
           <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold">Quotation Items</h2>
@@ -461,6 +454,7 @@ export default function NewQuotationPage() {
                         type="number"
                         min="1"
                         step="1"
+                        inputMode="numeric"
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
                         value={item.qty}
                         onChange={(event) => updateItem(item.key, { qty: Number(event.target.value) || 0 })}
@@ -483,9 +477,14 @@ export default function NewQuotationPage() {
                         type="number"
                         min="0"
                         step="0.01"
+                        inputMode="decimal"
+                        placeholder="0.00"
                         className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 font-normal"
-                        value={item.unit_price}
-                        onChange={(event) => updateItem(item.key, { unit_price: Number(event.target.value) || 0 })}
+                        value={item.unit_price === 0 ? '' : item.unit_price}
+                        onChange={(event) => {
+                          const val = event.target.value === '' ? 0 : parseFloat(event.target.value);
+                          updateItem(item.key, { unit_price: isNaN(val) ? 0 : val });
+                        }}
                         required
                       />
                     </label>
@@ -501,7 +500,6 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
-          {/* Amount Summary */}
           <section className="rounded-2xl bg-slate-900 p-5 text-white shadow-sm sm:ml-auto sm:max-w-md sm:p-6">
             <div className="flex justify-between border-b border-slate-700 pb-3">
               <span>Total Quantity</span>
@@ -514,9 +512,14 @@ export default function NewQuotationPage() {
                 type="number"
                 min="0"
                 step="0.01"
+                inputMode="decimal"
+                placeholder="0.00"
                 className="min-h-11 w-32 rounded-lg bg-white px-3 text-right text-slate-900"
-                value={lessAmount}
-                onChange={(event) => setLessAmount(Number(event.target.value) || 0)}
+                value={lessAmount === 0 ? '' : lessAmount}
+                onChange={(event) => {
+                  const val = event.target.value === '' ? 0 : parseFloat(event.target.value);
+                  setLessAmount(isNaN(val) ? 0 : val);
+                }}
               />
             </div>
             <div className="flex justify-between pt-4 text-lg">
@@ -535,7 +538,6 @@ export default function NewQuotationPage() {
         </form>
       </div>
 
-      {/* Preview Modal */}
       {previewOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-3 sm:p-6" role="dialog" aria-modal="true">
           <div className="mx-auto flex min-h-full max-w-4xl items-center justify-center">
@@ -628,7 +630,6 @@ export default function NewQuotationPage() {
                   </div>
                 </section>
 
-                {/* Preview Modal 底部条款与签名区 */}
                 <section className="mt-8 grid grid-cols-2 gap-8 border-t border-slate-200 pt-6 text-xs text-slate-500">
                   <div>
                     <p className="font-bold text-slate-700">Terms & Conditions:</p>
