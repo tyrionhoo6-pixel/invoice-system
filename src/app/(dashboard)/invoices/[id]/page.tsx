@@ -32,7 +32,6 @@ export default function InvoiceDetailPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [company, setCompany] = useState<CompanySettings | null>(null);
 
-  // Load invoice and company settings
   useEffect(() => {
     let isMounted = true;
 
@@ -46,14 +45,14 @@ export default function InvoiceDetailPage() {
 
         if (isMounted) {
           if (!result) {
-            setErrorMessage('Invoice not found.');
+            setErrorMessage(t.invoice.notFound);
           }
           setInvoice(result);
           setCompany(companySettings);
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(error instanceof Error ? error.message : 'Unable to load invoice.');
+          setErrorMessage(error instanceof Error ? error.message : t.invoice.notFound);
         }
       } finally {
         if (isMounted) {
@@ -67,9 +66,8 @@ export default function InvoiceDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [params.id]);
+  }, [params.id, t.invoice.notFound]);
 
-  // Handle auto-print query parameter
   useEffect(() => {
     if (!loading && invoice && searchParams.get('print') === '1') {
       const printTimer = window.setTimeout(() => window.print(), 250);
@@ -78,7 +76,6 @@ export default function InvoiceDetailPage() {
     return undefined;
   }, [invoice, loading, searchParams]);
 
-  // Update invoice status
   const changeStatus = async (status: 'paid' | 'unpaid') => {
     if (!invoice) return;
     setSavingStatus(true);
@@ -93,7 +90,6 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  // Generate PDF and share via WhatsApp
   const shareViaWhatsApp = async () => {
     if (!invoice) return;
 
@@ -104,7 +100,6 @@ export default function InvoiceDetailPage() {
 
     const element = document.querySelector<HTMLElement>('article.invoice-paper');
     if (element) {
-      // Lock element width to standard viewport temporarily to avoid mobile layout distortion
       const originalWidth = element.style.width;
       element.style.width = '794px';
 
@@ -143,7 +138,6 @@ export default function InvoiceDetailPage() {
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // Print invoice
   const printInvoice = () => {
     if (!invoice) {
       window.print();
@@ -157,7 +151,6 @@ export default function InvoiceDetailPage() {
     }, 500);
   };
 
-  // Duplicate invoice draft and redirect
   const duplicateInvoice = () => {
     if (!invoice) return;
     sessionStorage.setItem(
@@ -200,37 +193,8 @@ export default function InvoiceDetailPage() {
   const companyRegNo = company?.reg_no || (company as { registration_no?: string })?.registration_no || '';
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 8mm;
-          }
-          body {
-            background: white !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-          .invoice-paper {
-            box-shadow: none !important;
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-          }
-          tr, section, footer {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-        }
-      `}</style>
-
-      {/* Header Actions Area */}
+    <main className="min-h-screen w-full overflow-x-hidden bg-slate-100 px-3 py-6 text-slate-900 sm:px-6 lg:px-8">
+      {/* Header Actions */}
       <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
         <Link href="/invoices" className="text-sm font-bold text-slate-600 hover:text-blue-700">
           ← {t.invoice.backToInvoices}
@@ -242,7 +206,7 @@ export default function InvoiceDetailPage() {
             disabled={generatingPdf}
             className="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
           >
-            {generatingPdf ? 'Generating PDF...' : t.actions.shareWhatsApp}
+            {generatingPdf ? t.invoice.generatingPdf : t.actions.shareWhatsApp}
           </button>
           <button
             type="button"
@@ -267,14 +231,14 @@ export default function InvoiceDetailPage() {
             href={`/invoices/new?id=${invoice.id}`}
             className="inline-flex min-h-11 items-center rounded-xl bg-blue-700 px-4 text-sm font-bold text-white shadow-sm hover:bg-blue-800"
           >
-            Edit
+            {t.invoice.edit}
           </Link>
           <button
             type="button"
             onClick={printInvoice}
             className="min-h-11 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
           >
-            Print / PDF
+            {t.actions.print}
           </button>
         </div>
       </div>
@@ -285,8 +249,8 @@ export default function InvoiceDetailPage() {
         </p>
       )}
 
-      {/* Invoice Main Content */}
-      <article className="invoice-paper mx-auto max-w-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-10">
+      {/* Main Invoice Document */}
+      <article className="invoice-paper mx-auto w-full max-w-4xl overflow-hidden rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-10">
         <header className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-6 sm:flex-row">
           <div className="flex items-start gap-4">
             {company?.logo_url && (
@@ -302,9 +266,9 @@ export default function InvoiceDetailPage() {
                 {company?.company_name || 'InvoiceSys'}
               </p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight">
-                {invoice.invoice_type === 'proforma' ? 'PROFORMA INVOICE' : 'INVOICE'}
+                {invoice.invoice_type === 'proforma' ? t.invoice.proformaInvoice : t.invoice.invoice}
               </h1>
-              <p className="mt-1 text-sm text-slate-500">Professional billing statement</p>
+              <p className="mt-1 text-sm text-slate-500">{t.invoice.professionalBilling}</p>
               <p className="mt-1 text-xs text-slate-500">
                 {companyRegNo}
                 {company?.sst_no ? ` | SST: ${company.sst_no}` : ''}
@@ -312,12 +276,14 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
           <div className="sm:text-right">
-            <p className="text-sm font-bold text-slate-500">Invoice Number</p>
+            <p className="text-sm font-bold text-slate-500">
+              {invoice.invoice_type === 'proforma' ? t.invoice.proformaNumber : t.invoice.invoiceNumber}
+            </p>
             <p className="mt-1 text-2xl font-bold">{invoice.invoice_number}</p>
-            <p className="mt-2 text-sm text-slate-500">Issued: {formatDate(invoice.created_at)}</p>
+            <p className="mt-2 text-sm text-slate-500">{t.invoice.issued}: {formatDate(invoice.created_at)}</p>
             {invoiceStatus === 'paid' && (
               <span className="mt-3 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                PAID
+                {t.status.paidUpper}
               </span>
             )}
           </div>
@@ -325,25 +291,25 @@ export default function InvoiceDetailPage() {
 
         <section className="grid gap-6 border-b border-slate-200 py-6 sm:grid-cols-2">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">From</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{t.invoice.from}</p>
             <p className="mt-2 font-bold">{company?.company_name || 'InvoiceSys'}</p>
             <p className="whitespace-pre-line text-sm text-slate-500">
-              {company?.address || 'Billing Department'}
+              {company?.address || t.invoice.billingDepartment}
             </p>
             <p className="text-sm text-slate-500">
               {company?.phone || ''} {company?.email ? `| ${company.email}` : ''}
             </p>
           </div>
           <div className="sm:text-right">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Bill To</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{t.invoice.billTo}</p>
             <p className="mt-2 font-bold">
-              {invoice.customer?.company_name || invoice.customer?.name || 'Customer'}
+              {invoice.customer?.company_name || invoice.customer?.name || t.invoice.customer}
             </p>
             {invoice.customer?.name &&
               invoice.customer?.company_name &&
               invoice.customer.name.trim().toLowerCase() !==
                 invoice.customer.company_name.trim().toLowerCase() && (
-                <p className="text-sm text-slate-500">Attn: {invoice.customer.name}</p>
+                <p className="text-sm text-slate-500">{t.invoice.attn}: {invoice.customer.name}</p>
               )}
             {invoice.customer?.address && (
               <p className="whitespace-pre-line text-sm text-slate-500">
@@ -358,14 +324,14 @@ export default function InvoiceDetailPage() {
 
         {/* Item Table */}
         <section className="py-6">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-sm">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full min-w-[500px] text-left text-sm">
               <thead className="border-b-2 border-slate-900">
                 <tr>
-                  <th className="pb-3 font-bold">Item Description</th>
-                  <th className="pb-3 text-right font-bold">Qty</th>
-                  <th className="pb-3 text-right font-bold">Unit Price</th>
-                  <th className="pb-3 text-right font-bold">Subtotal</th>
+                  <th className="pb-3 font-bold">{t.invoice.description}</th>
+                  <th className="pb-3 text-right font-bold">{t.invoice.qty}</th>
+                  <th className="pb-3 text-right font-bold">{t.invoice.unitPrice}</th>
+                  <th className="pb-3 text-right font-bold">{t.invoice.subtotal}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -382,44 +348,44 @@ export default function InvoiceDetailPage() {
           </div>
         </section>
 
-        {/* Calculations */}
+        {/* Totals */}
         <section className="ml-auto max-w-sm border-t border-slate-200 pt-4">
           <div className="flex justify-between py-1.5 text-sm">
-            <span className="text-slate-500">Subtotal</span>
+            <span className="text-slate-500">{t.invoice.subtotal}</span>
             <span className="font-semibold">{formatMoney(invoice.subtotal_amount)}</span>
           </div>
           <div className="flex justify-between py-1.5 text-sm">
-            <span className="text-slate-500">Discount</span>
+            <span className="text-slate-500">{t.invoice.discount}</span>
             <span className="font-semibold">-{formatMoney(invoice.less_amount)}</span>
           </div>
           <div className="mt-2 flex justify-between border-t-2 border-slate-900 pt-3 text-lg">
-            <span className="font-bold">Total Payable</span>
+            <span className="font-bold">{t.invoice.totalPayable}</span>
             <span className="font-bold">{formatMoney(invoice.total_amount)}</span>
           </div>
         </section>
 
-        {/* Footer & Signature Section */}
+        {/* Footer */}
         <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500">
-          <p>Thank you for your business.</p>
+          <p>{t.invoice.thankYou}</p>
           <p className="mt-1 font-medium text-slate-700">
-            Payment Terms: {invoice.payment_terms || company?.payment_terms || '30 Days'}
+            {t.invoice.paymentTerms}: {invoice.payment_terms || company?.payment_terms || '30 Days'}
           </p>
 
           {(company?.bank_name || company?.bank_account_no || company?.bank_account_holder) && (
             <div className="mt-3 space-y-0.5 text-sm text-slate-700">
               {company.bank_name && (
                 <p>
-                  <span className="font-semibold">Bank Name:</span> {company.bank_name}
+                  <span className="font-semibold">{t.invoice.bankName}:</span> {company.bank_name}
                 </p>
               )}
               {company.bank_account_no && (
                 <p>
-                  <span className="font-semibold">Bank Account:</span> {company.bank_account_no}
+                  <span className="font-semibold">{t.invoice.bankAccount}:</span> {company.bank_account_no}
                 </p>
               )}
               {company.bank_account_holder && (
                 <p>
-                  <span className="font-semibold">Bank Holder:</span> {company.bank_account_holder}
+                  <span className="font-semibold">{t.invoice.bankHolder}:</span> {company.bank_account_holder}
                 </p>
               )}
             </div>
@@ -429,12 +395,12 @@ export default function InvoiceDetailPage() {
             {invoice.requires_customer_signature ? (
               <div className="flex flex-col items-start">
                 <p className="text-xs font-bold uppercase text-slate-600">
-                  {invoice.customer?.company_name || invoice.customer?.name || 'Customer Signature'}
+                  {invoice.customer?.company_name || invoice.customer?.name || t.invoice.customerSignature}
                 </p>
                 <div className="mt-2 h-16 w-48" />
                 <div className="w-48 border-b border-slate-300" />
                 <p className="mt-1 text-xs font-semibold text-slate-500">
-                  Customer Acceptance / Stamp
+                  {t.invoice.customerStamp}
                 </p>
               </div>
             ) : (
@@ -460,14 +426,14 @@ export default function InvoiceDetailPage() {
               </div>
 
               <div className="ml-auto w-48 border-b border-slate-300" />
-              <p className="mt-1 text-xs font-semibold text-slate-500">Authorized Signature</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">{t.invoice.authorizedSignature}</p>
             </div>
           </div>
         </footer>
       </article>
 
       <div className="no-print mx-auto mt-5 max-w-4xl text-center text-xs text-slate-500">
-        Use your browser&apos;s print dialog to save this invoice as a PDF.
+        {t.invoice.printTip}
       </div>
     </main>
   );

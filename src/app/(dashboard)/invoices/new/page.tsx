@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Customer, Product } from '@/types/invoice';
 import {
@@ -15,6 +14,16 @@ import { formatDate } from '@/utils/format';
 
 type DraftItem = CreateInvoiceItemInput & { key: number };
 type InvoiceDraft = { customerId: string; items: CreateInvoiceItemInput[]; lessAmount: number };
+
+const STD_PAYMENT_OPTIONS = ['Cash / COD', '7 Days', '14 Days', '30 Days', '60 Days'];
+
+const parsePaymentTerms = (terms?: string) => {
+  if (!terms) return { option: '30 Days', custom: '' };
+  if (STD_PAYMENT_OPTIONS.includes(terms)) {
+    return { option: terms, custom: '' };
+  }
+  return { option: 'Custom', custom: terms };
+};
 
 const getRecordValue = (record: object, keys: string[]): string => {
   for (const key of keys) {
@@ -34,7 +43,7 @@ const emptyItem = (key: number): DraftItem => ({
   subtotal: 0,
 });
 
-export default function NewInvoicePage() {
+function InvoiceFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('id');
@@ -75,13 +84,9 @@ export default function NewInvoicePage() {
         setCompany(companySettings);
 
         if (!editId && companySettings?.payment_terms) {
-          const stdOptions = ['Cash / COD', '7 Days', '14 Days', '30 Days', '60 Days'];
-          if (stdOptions.includes(companySettings.payment_terms)) {
-            setPaymentTermsOption(companySettings.payment_terms);
-          } else {
-            setPaymentTermsOption('Custom');
-            setCustomPaymentTerms(companySettings.payment_terms);
-          }
+          const { option, custom } = parsePaymentTerms(companySettings.payment_terms);
+          setPaymentTermsOption(option);
+          setCustomPaymentTerms(custom);
         }
 
         if (editId) {
@@ -92,13 +97,9 @@ export default function NewInvoicePage() {
             setRequiresCustomerSignature(!!existingInvoice.requires_customer_signature);
 
             if (existingInvoice.payment_terms) {
-              const stdOptions = ['Cash / COD', '7 Days', '14 Days', '30 Days', '60 Days'];
-              if (stdOptions.includes(existingInvoice.payment_terms)) {
-                setPaymentTermsOption(existingInvoice.payment_terms);
-              } else {
-                setPaymentTermsOption('Custom');
-                setCustomPaymentTerms(existingInvoice.payment_terms);
-              }
+              const { option, custom } = parsePaymentTerms(existingInvoice.payment_terms);
+              setPaymentTermsOption(option);
+              setCustomPaymentTerms(custom);
             }
 
             if (existingInvoice.customer) {
@@ -282,7 +283,7 @@ export default function NewInvoicePage() {
         {errorMessage && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700">{errorMessage}</p>}
 
         <form className="space-y-5" onSubmit={submit}>
-          {/* Flexi Customer Input Block */}
+          {/* Customer Input Block */}
           <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold">{t.invoice.customer} Details</h2>
@@ -340,11 +341,9 @@ export default function NewInvoicePage() {
                   onChange={(e) => setPaymentTermsOption(e.target.value)}
                   disabled={loading}
                 >
-                  <option value="Cash / COD">Cash / COD</option>
-                  <option value="7 Days">7 Days</option>
-                  <option value="14 Days">14 Days</option>
-                  <option value="30 Days">30 Days</option>
-                  <option value="60 Days">60 Days</option>
+                  {STD_PAYMENT_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
                   <option value="Custom">Custom...</option>
                 </select>
 
@@ -360,7 +359,6 @@ export default function NewInvoicePage() {
               </div>
             </div>
 
-            {/* Customer Signature Option */}
             <div className="mt-5 border-t border-slate-100 pt-4">
               <label htmlFor="requires-signature" className="inline-flex cursor-pointer items-center gap-3">
                 <input
@@ -587,6 +585,15 @@ export default function NewInvoicePage() {
                     <span className="font-bold">{formatMoney(totalAmount)}</span>
                   </div>
                 </section>
+
+                {requiresCustomerSignature && (
+                  <section className="mt-12 flex justify-end">
+                    <div className="w-64 text-center">
+                      <div className="h-16 border-b border-slate-400"></div>
+                      <p className="mt-2 text-xs font-bold uppercase tracking-wider text-slate-600">Customer Acceptance & Signature</p>
+                    </div>
+                  </section>
+                )}
               </div>
               <div className="no-print flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:justify-end">
                 <button
@@ -610,5 +617,13 @@ export default function NewInvoicePage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function NewInvoicePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading form...</div>}>
+      <InvoiceFormContent />
+    </Suspense>
   );
 }
