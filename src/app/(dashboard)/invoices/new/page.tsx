@@ -7,6 +7,7 @@ import {
   InvoiceService,
   type CreateInvoiceItemInput,
 } from '@/services/invoice.service';
+import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/context/LanguageContext';
 import type { CompanySettings } from '@/types/company';
 import { formatMoney } from '@/lib/utils';
@@ -140,11 +141,11 @@ function InvoiceFormContent() {
             sessionStorage.removeItem('invoice-duplicate-draft');
           }
         }
-    } catch (error: unknown) {
-            setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
-          } finally {
-            setLoading(false);
-          }
+      } catch (error: unknown) {
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to initialize invoice form.');
+      } finally {
+        setLoading(false);
+      }
     };
 
     void initializeForm();
@@ -246,6 +247,59 @@ function InvoiceFormContent() {
     }
   };
 
+  // Delivery Order (DO) generation handler
+  const handleGenerateDO = async () => {
+    if (!editId) {
+      alert('Please save the invoice first before generating a Delivery Order.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 1. Generate DO number
+      const dateStr = new Date().toISOString().slice(2, 7).replace('-', '');
+      const random4 = Math.floor(1000 + Math.random() * 9000);
+      const doNumber = `DO${dateStr}-${random4}`;
+
+      // 2. Insert DO record into Supabase
+      const { data: doData, error: doError } = await supabase
+        .from('delivery_orders')
+        .insert({
+          do_number: doNumber,
+          invoice_id: editId,
+          customer_name: companyInput,
+          customer_address: '',
+          delivery_date: new Date().toISOString().split('T')[0],
+          status: 'Pending',
+        })
+        .select()
+        .single();
+
+      if (doError) throw doError;
+
+      // 3. Insert line items into delivery_order_items table
+      const itemsToInsert = items.map((item) => ({
+        delivery_order_id: doData.id,
+        description: item.description,
+        quantity: item.qty,
+        unit: item.unit || 'pcs',
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('delivery_order_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) throw itemsError;
+
+      alert(`Delivery Order ${doNumber} created successfully!`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('Failed to generate DO: ' + msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await saveInvoice();
@@ -277,6 +331,15 @@ function InvoiceFormContent() {
             className="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
           >
             {t.invoice.preview}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGenerateDO}
+            disabled={saving || loading}
+            className="inline-flex min-h-11 items-center rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {saving ? 'Processing...' : '+ Generate DO'}
           </button>
         </div>
 

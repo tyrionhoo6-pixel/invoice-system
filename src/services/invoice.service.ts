@@ -461,6 +461,40 @@ export async function getProducts(): Promise<Product[]> {
   return (data ?? []) as Product[];
 }
 
+// Delivery Orders API
+export async function getDeliveryOrders() {
+  const { data, error } = await supabase
+    .from('delivery_orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Unable to load delivery orders: ${error.message}`);
+  return data;
+}
+
+export async function getDeliveryOrderById(id: string) {
+  const { data, error } = await supabase
+    .from('delivery_orders')
+    .select('*, delivery_order_items(*)')
+    .eq('id', id)
+    .single();
+
+  if (error) throw new Error(`Unable to load delivery order: ${error.message}`);
+  return data;
+}
+
+export async function updateDeliveryOrderStatus(id: string, status: string) {
+  const { data, error } = await supabase
+    .from('delivery_orders')
+    .update({ status })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Unable to update DO status: ${error.message}`);
+  return data;
+}
+
 export const InvoiceService = {
   generateNextInvoiceNumber,
   generateNextProformaNumber,
@@ -482,4 +516,7 @@ export const InvoiceService = {
   saveCompanySettings,
   uploadCompanyLogo,
   uploadCompanySignature,
+  getDeliveryOrders,
+  getDeliveryOrderById,
+  updateDeliveryOrderStatus,
 };
