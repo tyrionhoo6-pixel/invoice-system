@@ -18,14 +18,12 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [company, setCompany] = useState<CompanySettings | null>(null);
 
-  // 筛选与导出状态
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [customerId, setCustomerId] = useState('all');
   const [month, setMonth] = useState('');
   const [exportMode, setExportMode] = useState('current');
 
-  // 操作与 Modal 状态
   const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
   const [voidingInvoice, setVoidingInvoice] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -34,7 +32,6 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 初始化加载数据
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
@@ -64,20 +61,21 @@ export default function InvoicesPage() {
     };
   }, []);
 
-  // 获取所有不重复的客户列表
   const customers = useMemo(() => {
     const uniqueCustomers = new Map<string, string>();
     invoices.forEach((invoice) => {
       if (invoice.customer_id) {
-        uniqueCustomers.set(invoice.customer_id, invoice.customer?.name || 'Unnamed customer');
+        uniqueCustomers.set(
+          invoice.customer_id,
+          invoice.customer?.name || (t.customer.unnamed ?? 'Unnamed customer')
+        );
       }
     });
     return Array.from(uniqueCustomers, ([id, name]) => ({ id, name })).sort((a, b) =>
       a.name.localeCompare(b.name)
     );
-  }, [invoices]);
+  }, [invoices, t]);
 
-  // 根据条件筛选发票
   const filteredInvoices = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -98,7 +96,6 @@ export default function InvoicesPage() {
     });
   }, [invoices, query, status, customerId, month]);
 
-  // 顶部看板统计（与导出逻辑保持一致，兼容 paid_amount）
   const summary = useMemo(() => {
     return filteredInvoices.reduce(
       (acc, invoice) => {
@@ -106,7 +103,7 @@ export default function InvoicesPage() {
         const currentStatus = (invoice.status ?? 'unpaid').toLowerCase();
 
         if (currentStatus === 'void') {
-          return acc; // VOID 不计入统计
+          return acc;
         }
 
         acc.totalInvoices += 1;
@@ -133,7 +130,6 @@ export default function InvoicesPage() {
     );
   }, [filteredInvoices]);
 
-  // 快捷切换发票状态 (Paid / Unpaid)
   const toggleInvoiceStatus = async (invoice: Invoice) => {
     const currentStatus = (invoice.status ?? 'unpaid').toLowerCase();
     const nextStatus = currentStatus === 'paid' ? 'unpaid' : 'paid';
@@ -152,7 +148,6 @@ export default function InvoicesPage() {
     }
   };
 
-  // CSV 导出核心函数
   const exportRows = (rows: Invoice[], fileName: string) => {
     let grandTotal = 0;
     let grandPaid = 0;
@@ -182,7 +177,6 @@ export default function InvoicesPage() {
         grandOutstanding += outstanding;
       }
 
-      // 日期转换处理
       const formattedCreatedDate = invoice.created_at
         ? new Date(invoice.created_at).toISOString().slice(0, 10)
         : '';
@@ -236,7 +230,6 @@ export default function InvoicesPage() {
     downloadCsv([customHeaders, ...rowsForExport, [], totalSummaryRow], fileName);
   };
 
-  // 导出点击事件触发器
   const exportInvoices = () => {
     const today = new Date().toISOString().slice(0, 10);
     const selectedCustomerName =
@@ -268,7 +261,6 @@ export default function InvoicesPage() {
     }
   };
 
-  // 确认作废 (Void)
   const confirmVoid = async () => {
     if (!voidingInvoice) return;
     setVoiding(true);
@@ -286,7 +278,6 @@ export default function InvoicesPage() {
     }
   };
 
-  // 确认删除 (Delete)
   const confirmDelete = async () => {
     if (!deletingInvoice) return;
     setDeleting(true);
@@ -306,7 +297,6 @@ export default function InvoicesPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        {/* 页头导航区域 */}
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-700">
@@ -324,17 +314,19 @@ export default function InvoicesPage() {
               onChange={(e) => setExportMode(e.target.value)}
               className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold"
             >
-              <option value="current">Export Statement (Current View)</option>
-              <option value="outstanding_only">Export Outstanding Only (Unpaid)</option>
-              <option value="monthly">Export all invoices this month</option>
-              <option value="backup">Full company backup</option>
+              <option value="current">
+                {t.invoice.exportStatementCurrent ?? 'Export Statement (Current View)'}
+              </option>
+              <option value="outstanding_only">
+                {t.invoice.exportStatementAll ?? 'Export Statement (All Invoices)'}
+              </option>
             </select>
             <button
               type="button"
               onClick={exportInvoices}
               className="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700"
             >
-              Export CSV
+              {t.invoice.exportCsv ?? 'Export CSV'}
             </button>
             <Link
               href="/invoices/new"
@@ -345,40 +337,41 @@ export default function InvoicesPage() {
           </div>
         </header>
 
-        {/* 错误提示 */}
         {errorMessage && (
           <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
             {errorMessage}
           </p>
         )}
 
-        {/* 顶部看板统计 */}
         <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Invoices
+              {t.invoice.totalInvoices ?? 'TOTAL INVOICES'}
             </p>
             <p className="mt-2 text-2xl font-bold">{summary.totalInvoices}</p>
           </div>
           <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Value
+              {t.invoice.totalValue ?? 'TOTAL VALUE'}
             </p>
             <p className="mt-2 text-2xl font-bold">{formatMoney(summary.totalValue)}</p>
           </div>
           <div className="rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Paid</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">
+              {t.invoice.paid ?? 'PAID'}
+            </p>
             <p className="mt-2 text-2xl font-bold text-emerald-800">{formatMoney(summary.paid)}</p>
           </div>
           <div className="rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-100">
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Outstanding</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
+              {t.invoice.outstanding ?? 'OUTSTANDING'}
+            </p>
             <p className="mt-2 text-2xl font-bold text-amber-800">
               {formatMoney(summary.outstanding)}
             </p>
           </div>
         </section>
 
-        {/* 筛选与列表区域 */}
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_190px_170px_170px]">
             <input
@@ -392,7 +385,7 @@ export default function InvoicesPage() {
               onChange={(e) => setCustomerId(e.target.value)}
               className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 font-semibold"
             >
-              <option value="all">Select client</option>
+              <option value="all">{t.invoice.selectClient ?? 'Select client'}</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}
@@ -414,11 +407,10 @@ export default function InvoicesPage() {
               <option value="all">{t.invoice.allStatuses}</option>
               <option value="paid">{t.status.paid}</option>
               <option value="unpaid">{t.status.unpaid}</option>
-              <option value="void">VOID</option>
+              <option value="void">{t.status.void}</option>
             </select>
           </div>
 
-          {/* 发票表格 */}
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
@@ -427,8 +419,8 @@ export default function InvoicesPage() {
                   <th className="px-3 py-3 font-bold">{t.invoice.customer}</th>
                   <th className="px-3 py-3 font-bold">{t.invoice.issued}</th>
                   <th className="px-3 py-3 text-right font-bold">{t.invoice.totalShort}</th>
-                  <th className="px-3 py-3 font-bold">Status</th>
-                  <th className="px-3 py-3 text-right font-bold">Actions</th>
+                  <th className="px-3 py-3 font-bold">{t.invoice.statusHeader ?? 'STATUS'}</th>
+                  <th className="px-3 py-3 text-right font-bold">{t.invoice.actionsHeader ?? 'ACTIONS'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -486,7 +478,7 @@ export default function InvoicesPage() {
                         <td className="px-3 py-4">
                           {isVoid ? (
                             <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-800">
-                              VOID
+                              {t.status.voidUpper ?? 'VOID'}
                             </span>
                           ) : (
                             <span
@@ -515,23 +507,23 @@ export default function InvoicesPage() {
                                   } disabled:opacity-50`}
                                 >
                                   {isUpdating
-                                    ? 'Updating...'
+                                    ? t.actions.saving
                                     : isPaid
-                                    ? 'Mark Unpaid'
-                                    : 'Mark Paid'}
+                                    ? t.actions.markUnpaid
+                                    : t.actions.markPaid}
                                 </button>
                                 <Link
                                   href={`/invoices/new?id=${invoice.id}`}
                                   className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
                                 >
-                                  Edit
+                                  {t.invoice.edit}
                                 </Link>
                                 <button
                                   type="button"
                                   onClick={() => setVoidingInvoice(invoice)}
                                   className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100"
                                 >
-                                  Void
+                                  {t.invoice.void}
                                 </button>
                               </>
                             )}
@@ -553,7 +545,6 @@ export default function InvoicesPage() {
         </section>
       </div>
 
-      {/* Void 确认弹窗 */}
       {voidingInvoice && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
@@ -561,10 +552,9 @@ export default function InvoicesPage() {
           aria-modal="true"
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 className="text-xl font-bold">Void Invoice</h2>
+            <h2 className="text-xl font-bold">{t.invoice.confirmVoid}</h2>
             <p className="mt-2 text-sm text-slate-500">
-              Are you sure you want to void this invoice? This will set its amount to zero in
-              accounting reports while keeping the number for sequential auditing.
+              {t.invoice.confirmVoidDescription}
             </p>
             <p className="mt-3 font-semibold text-slate-900">{voidingInvoice.invoice_number}</p>
             <div className="mt-6 flex justify-end gap-2">
@@ -573,7 +563,7 @@ export default function InvoicesPage() {
                 onClick={() => setVoidingInvoice(null)}
                 className="min-h-11 rounded-xl bg-slate-100 px-4 text-sm font-bold text-slate-700"
               >
-                Cancel
+                {t.customer.cancel}
               </button>
               <button
                 type="button"
@@ -581,14 +571,13 @@ export default function InvoicesPage() {
                 disabled={voiding}
                 className="min-h-11 rounded-xl bg-amber-600 px-4 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60"
               >
-                {voiding ? 'Voiding...' : 'Confirm Void'}
+                {voiding ? t.invoice.voiding : t.invoice.confirmVoid}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete 确认弹窗 */}
       {deletingInvoice && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
@@ -596,8 +585,8 @@ export default function InvoicesPage() {
           aria-modal="true"
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-<h2 className="text-xl font-bold">Delete Invoice</h2>
-<p className="mt-2 text-sm text-slate-500">Are you sure you want to delete this invoice? This action cannot be undone.</p>
+            <h2 className="text-xl font-bold">{t.customer.confirmDelete}</h2>
+            <p className="mt-2 text-sm text-slate-500">{t.customer.confirmDeleteDescription}</p>
             <p className="mt-3 font-semibold">{deletingInvoice.invoice_number}</p>
             <div className="mt-6 flex justify-end gap-2">
               <button
@@ -613,7 +602,7 @@ export default function InvoicesPage() {
                 disabled={deleting}
                 className="min-h-11 rounded-xl bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-60"
               >
-                {deleting ? 'Deleting...' : t.invoice.delete}
+                {deleting ? t.customer.deleting : t.invoice.delete}
               </button>
             </div>
           </div>

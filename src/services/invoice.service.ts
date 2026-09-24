@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import type { Customer, Invoice, Product, InvoiceWithItems, InvoiceType, InvoiceStatus } from '@/types/invoice';
 import type { CompanySettings } from '@/types/company';
+import type { CreditNote, CreateCreditNoteInput } from '@/types/creditNote';
 
 export interface CreateInvoiceItemInput {
   product_id?: string | null;
@@ -461,7 +462,6 @@ export async function getProducts(): Promise<Product[]> {
   return (data ?? []) as Product[];
 }
 
-// Delivery Orders API
 export async function getDeliveryOrders() {
   const { data, error } = await supabase
     .from('delivery_orders')
@@ -495,6 +495,114 @@ export async function updateDeliveryOrderStatus(id: string, status: string) {
   return data;
 }
 
+export async function generateCNNumber(): Promise<string> {
+  const userId = await getAppUserId();
+  const date = new Date();
+  const yearStr = date.getFullYear().toString().slice(-2);
+  const monthStr = (date.getMonth() + 1).toString().padStart(2, '0');
+  const prefix = `CN${yearStr}${monthStr}-`;
+
+  const { data } = await supabase
+    .from('credit_notes')
+    .select('cn_number')
+    .eq('user_id', userId)
+    .like('cn_number', `${prefix}%`)
+    .order('cn_number', { ascending: false })
+    .limit(1);
+
+  if (data && data.length > 0) {
+    const parts = data[0].cn_number.split('-');
+    if (parts.length === 2 && !isNaN(Number(parts[1]))) {
+      const lastNum = parseInt(parts[1], 10);
+      const nextNum = (lastNum + 1).toString().padStart(4, '0');
+      return `${prefix}${nextNum}`;
+    }
+  }
+
+  return `${prefix}0001`;
+}
+
+export async function createCreditNote(input: CreateCreditNoteInput): Promise<CreditNote> {
+  const userId = await getAppUserId();
+  const cn_number = await generateCNNumber();
+  const extendedInput = input as CreateCreditNoteInput & { invoice_no?: string; cn_type?: string };
+
+  const { data: cn, error: cnError } = await supabase
+    .from('credit_notes')
+    .insert([
+      {
+        cn_number,
+        invoice_id: extendedInput.invoice_id || null,
+        invoice_no: extendedInput.invoice_no || null,
+        customer_id: extendedInput.customer_id,
+        customer_name: extendedInput.customer_name,
+        cn_type: extendedInput.cn_type || 'RETURN',
+        reason: extendedInput.reason || '',
+        total_amount: toMoney(extendedInput.total_amount),
+        status: 'Issued',
+        user_id: userId,
+      },
+    ])
+    .select()
+    .single();
+
+  if (cnError) throw new Error(`Unable to create credit note: ${cnError.message}`);
+
+  if (extendedInput.items && extendedInput.items.length > 0) {
+    const itemsToInsert = extendedInput.items.map((item) => ({
+      credit_note_id: cn.id,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: toMoney(item.unit_price),
+      subtotal: toMoney(item.subtotal),
+    }));
+
+    const { error: itemsError } = await supabase
+      .from('credit_note_items')
+      .insert(itemsToInsert);
+
+    if (itemsError) throw new Error(`Unable to create credit note items: ${itemsError.message}`);
+  }
+
+  return cn as CreditNote;
+}
+
+export async function getCreditNotes(): Promise<CreditNote[]> {
+  const userId = await getAppUserId();
+  const { data, error } = await supabase
+    .from('credit_notes')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Unable to load credit notes: ${error.message}`);
+  return (data ?? []) as CreditNote[];
+}
+
+export async function getCreditNoteById(id: string): Promise<CreditNote | null> {
+  const userId = await getAppUserId();
+  const { data: cn, error: cnError } = await supabase
+    .from('credit_notes')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (cnError || !cn) return null;
+
+  const { data: items, error: itemsError } = await supabase
+    .from('credit_note_items')
+    .select('*')
+    .eq('credit_note_id', id);
+
+  if (itemsError) throw new Error(`Unable to load credit note items: ${itemsError.message}`);
+
+  return {
+    ...cn,
+    credit_note_items: items || [],
+  } as CreditNote;
+}
+
 export const InvoiceService = {
   generateNextInvoiceNumber,
   generateNextProformaNumber,
@@ -519,4 +627,8 @@ export const InvoiceService = {
   getDeliveryOrders,
   getDeliveryOrderById,
   updateDeliveryOrderStatus,
+  generateCNNumber,
+  createCreditNote,
+  getCreditNotes,
+  getCreditNoteById,
 };

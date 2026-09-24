@@ -17,14 +17,16 @@ export default function SiteHeader() {
   const [companyName, setCompanyName] = useState('My Company');
   const [logoUrl, setLogoUrl] = useState('');
   const { locale, toggleLocale, t } = useLanguage();
+  
   const links = [
-      { href: '/', label: t.navigation.dashboard },
-      { href: '/quotations', label: 'Quotations' },
-      { href: '/invoices', label: t.navigation.invoices },
-      { href: '/delivery-orders', label: 'Delivery Orders' },
-      { href: '/customers', label: t.navigation.customers },
-      { href: '/settings', label: 'Settings' },
-    ];
+    { href: '/', label: t.navigation.dashboard },
+    { href: '/quotations', label: t.navigation.quotations },
+    { href: '/invoices', label: t.navigation.invoices },
+    { href: '/delivery-orders', label: t.navigation.deliveryOrders },
+    { href: '/credit-notes', label: t.navigation.creditNotes },
+    { href: '/customers', label: t.navigation.customers },
+    { href: '/settings', label: t.navigation.settings },
+  ];
 
   useEffect(() => {
     const syncHeader = async () => {
@@ -70,7 +72,7 @@ export default function SiteHeader() {
         </Link>
         <div className="flex items-center gap-2">
         <button type="button" onClick={toggleLocale} aria-label={`${t.navigation.language}: ${localeLabels[locale]}`} className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700">{locale === 'en' ? '中文' : 'English'}</button>
-        <button type="button" aria-expanded={menuOpen} aria-controls="site-navigation" onClick={() => setMenuOpen((open) => !open)} className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 md:hidden"><span className="sr-only">{t.actions.toggleMenu}</span><span className="text-xl">{menuOpen ? 'x' : '='}</span></button>
+        <button type="button" aria-expanded={menuOpen} aria-controls="site-navigation" onClick={() => setMenuOpen((open) => !open)} className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 md:hidden"><span className="sr-only">{t.actions.toggleMenu}</span><span className="text-xl">{menuOpen ? '✕' : '☰'}</span></button>
         </div>
         <nav id="site-navigation" className={`${menuOpen ? 'absolute left-4 right-4 top-[4.5rem] flex' : 'hidden'} flex-col gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg md:static md:flex md:flex-row md:items-center md:border-0 md:bg-transparent md:p-0 md:shadow-none`}>
           {links.map((link) => {
@@ -78,7 +80,7 @@ export default function SiteHeader() {
             return <Link key={link.href} href={link.href} onClick={() => setMenuOpen(false)} className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}>{link.label}</Link>;
           })}
           {userEmail && <Link href="/settings" onClick={() => setMenuOpen(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100">{userEmail}</Link>}
-          {userEmail && <button type="button" onClick={logout} className="rounded-xl px-4 py-2.5 text-left text-sm font-bold text-red-600 hover:bg-red-50">Logout</button>}
+          {userEmail && <button type="button" onClick={logout} className="rounded-xl px-4 py-2.5 text-left text-sm font-bold text-red-600 hover:bg-red-50">{t.navigation.logout}</button>}
         </nav>
       </div>
     </header>

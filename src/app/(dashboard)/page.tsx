@@ -35,7 +35,7 @@ export default function DashboardPage() {
     void loadDashboardData();
   }, []);
 
-  // Invoice 统计
+  // Invoice calculations
   const unpaidAmount = useMemo(
     () =>
       invoices
@@ -49,7 +49,7 @@ export default function DashboardPage() {
   );
   const recentInvoices = invoices.slice(0, 5);
 
-  // Quotation 统计与最新 5 条
+  // Quotation calculations
   const activeQuotationsCount = useMemo(() => quotations.length, [quotations]);
   const activeQuotationsAmount = useMemo(
     () => quotations.reduce((sum, item) => sum + (Number(item.total_amount) || 0), 0),
@@ -72,7 +72,7 @@ export default function DashboardPage() {
               href="/quotations/new"
               className="inline-flex min-h-12 items-center justify-center rounded-xl bg-slate-200 px-5 text-sm font-bold text-slate-800 transition hover:bg-slate-300"
             >
-              + Create quotation
+              + {t.quotation?.createQuotation ?? 'Create quotation'}
             </Link>
             <Link
               href="/invoices/new"
@@ -85,7 +85,7 @@ export default function DashboardPage() {
 
         {errorMessage && <p className="mb-5 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{errorMessage}</p>}
 
-        {/* 顶部统计卡片 */}
+        {/* Top Summary Cards */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl bg-slate-900 p-5 text-white shadow-sm">
             <p className="text-sm font-semibold text-slate-300">{t.invoice.totalUnpaid}</p>
@@ -100,9 +100,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <p className="text-sm font-semibold text-slate-500">Quotations</p>
+            <p className="text-sm font-semibold text-slate-500">{t.quotation?.quotations ?? 'Quotations'}</p>
             <p className="mt-3 text-2xl font-bold text-slate-900">{activeQuotationsCount}</p>
-            <p className="mt-2 text-xs font-semibold text-blue-700">{formatMoney(activeQuotationsAmount)} Total</p>
+            <p className="mt-2 text-xs font-semibold text-blue-700">{formatMoney(activeQuotationsAmount)} {t.quotation?.total ?? 'Total'}</p>
           </div>
 
           <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
@@ -112,30 +112,29 @@ export default function DashboardPage() {
                 {t.invoice.manageCustomers} <span aria-hidden="true">-&gt;</span>
               </Link>
               <Link href="/quotations" className="inline-flex text-xs font-bold text-blue-600 hover:text-blue-800">
-                View all quotations -&gt;
+                {t.quotation?.viewAllQuotations ?? 'View all quotations'} -&gt;
               </Link>
             </div>
           </div>
         </section>
 
-        {/* 下方双列列表：Recent Quotations 与 Recent Invoices 并列 */}
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          {/* 左侧：Recent Quotations */}
+          {/* Left: Recent Quotations */}
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold">Recent quotations</h2>
-                <p className="mt-1 text-sm text-slate-500">Your latest quotation activity</p>
+                <h2 className="text-xl font-bold">{t.quotation?.recentQuotations ?? 'Recent quotations'}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t.quotation?.latestQuotationActivity ?? 'Your latest quotation activity'}</p>
               </div>
               <Link href="/quotations" className="text-sm font-bold text-blue-700 hover:text-blue-900">
-                View all
+                {t.quotation?.viewAll ?? 'View all'}
               </Link>
             </div>
 
             <div className="mt-5 divide-y divide-slate-100">
-              {loading && <p className="py-8 text-center text-sm text-slate-500">Loading quotations...</p>}
+              {loading && <p className="py-8 text-center text-sm text-slate-500">{t.quotation?.loadingQuotations ?? 'Loading quotations...'}</p>}
               {!loading && recentQuotations.length === 0 && (
-                <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No quotations found.</p>
+                <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">{t.quotation?.noQuotations ?? 'No quotations found.'}</p>
               )}
               {recentQuotations.map((quotation) => (
                 <Link
@@ -160,7 +159,7 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* 右侧：Recent Invoices */}
+          {/* Right: Recent Invoices */}
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>

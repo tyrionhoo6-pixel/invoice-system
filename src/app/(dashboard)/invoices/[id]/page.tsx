@@ -90,7 +90,6 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  // 改进后的原生 PDF 文件分享函数
   const shareViaWhatsApp = async () => {
     if (!invoice) return;
 
@@ -107,7 +106,6 @@ export default function InvoiceDetailPage() {
     element.style.width = '794px';
 
     try {
-      // 1. 使用 html2pdf 生成 PDF 内存 Blob
       const html2pdf = (await import('html2pdf.js')).default;
       const opt: Record<string, unknown> = {
         margin: [0.2, 0.2, 0.2, 0.2],
@@ -124,8 +122,6 @@ export default function InvoiceDetailPage() {
       };
 
       const pdfBlob: Blob = await html2pdf().set(opt).from(element).output('blob');
-
-      // 2. 将 Blob 转为真实的 File 对象
       const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
       const customerName = invoice.customer?.company_name || invoice.customer?.name || 'Customer';
@@ -133,7 +129,6 @@ export default function InvoiceDetailPage() {
       const docTypeName = isProforma ? 'proforma invoice' : 'invoice';
       const shareMessage = `Hello ${customerName}, here is your ${docTypeName} ${invoice.invoice_number}.`;
 
-      // 3. 检查设备是否支持原生文件分享（Android & iOS 手机原生支持）
       if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
         await navigator.share({
           files: [pdfFile],
@@ -141,7 +136,6 @@ export default function InvoiceDetailPage() {
           text: shareMessage,
         });
       } else {
-        // 桌面端降级方案：自动下载 PDF，并尝试打开网页版 WhatsApp
         const downloadUrl = URL.createObjectURL(pdfBlob);
         const a = document.createElement('a');
         a.href = downloadUrl;
@@ -195,6 +189,26 @@ export default function InvoiceDetailPage() {
     router.push('/invoices/new?duplicate=1');
   };
 
+  // 发起 Credit Note
+  const handleCreateCreditNote = () => {
+    if (!invoice) return;
+    sessionStorage.setItem(
+      'cn-from-invoice',
+      JSON.stringify({
+        invoiceId: invoice.id,
+        customerId: invoice.customer_id,
+        customerName: invoice.customer?.company_name || invoice.customer?.name || '',
+        items: (invoice.invoice_items ?? []).map((item) => ({
+          description: item.product_name,
+          quantity: Number(item.quantity) || 1,
+          unit_price: Number(item.unit_price) || 0,
+          subtotal: Number(item.subtotal) || 0,
+        })),
+      })
+    );
+    router.push(`/credit-notes/new?invoice_id=${invoice.id}`);
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-10 text-center text-slate-500">
@@ -219,7 +233,6 @@ export default function InvoiceDetailPage() {
 
   return (
     <main className="min-h-screen w-full overflow-x-hidden bg-slate-100 px-3 py-6 text-slate-900 sm:px-6 lg:px-8">
-      {/* 全局打印/PDF 样式修复 */}
       <style jsx global>{`
         @media print {
           @page {
@@ -242,7 +255,6 @@ export default function InvoiceDetailPage() {
             display: none !important;
           }
 
-          /* 强制将卡片设为标准的 A4 794px 宽，防止移动端缩窄变形 */
           .invoice-paper {
             width: 794px !important;
             max-width: 794px !important;
@@ -255,7 +267,6 @@ export default function InvoiceDetailPage() {
             background: white !important;
           }
 
-          /* 强制解决移动端 flex-col 换行导致的断页问题 */
           .invoice-paper header {
             display: flex !important;
             flex-direction: row !important;
@@ -279,7 +290,6 @@ export default function InvoiceDetailPage() {
             justify-content: space-between !important;
           }
 
-          /* 防止关键节点在中间跨页断开 */
           section, table, tr, footer {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -293,6 +303,13 @@ export default function InvoiceDetailPage() {
           ← {t.invoice.backToInvoices}
         </Link>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleCreateCreditNote}
+            className="min-h-11 rounded-xl bg-purple-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-purple-700 transition"
+          >
+            Issue Credit Note
+          </button>
           <button
             type="button"
             onClick={() => void shareViaWhatsApp()}
