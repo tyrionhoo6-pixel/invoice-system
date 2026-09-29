@@ -3,9 +3,16 @@ export function formatMoney(value: number | string | null | undefined): string {
   return `RM ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function formatDate(value?: string | null, style: 'short' | 'long' | 'medium' = 'medium'): string {
+export function formatDate(value?: string | null): string {
   if (!value) return '-';
-  return new Intl.DateTimeFormat('en-US', { dateStyle: style }).format(new Date(value));
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return '-';
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  return `${day}/${month}/${year}`; 
 }
 
 export function monthKey(value?: string | null): string {

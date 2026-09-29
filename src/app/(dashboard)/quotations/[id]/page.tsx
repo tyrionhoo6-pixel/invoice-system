@@ -19,7 +19,6 @@ function buildQuotationFileBaseName(quotation: QuotationWithItems): string {
   return `${customerNameForFile} - ${quotation.quotation_number}`;
 }
 
-// Helper: Dismiss mobile soft keyboard
 function dismissKeyboard() {
   if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
     document.activeElement.blur();
@@ -40,7 +39,6 @@ export default function QuotationDetailPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [company, setCompany] = useState<CompanySettings | null>(null);
 
-  // 1. Fetch initial quotation and company settings with unmount protection
   useEffect(() => {
     let isMounted = true;
 
@@ -77,7 +75,6 @@ export default function QuotationDetailPage() {
     };
   }, [params.id]);
 
-  // 2. Handle automatic print trigger from query parameters
   useEffect(() => {
     if (!loading && quotation && searchParams.get('print') === '1') {
       const printTimer = window.setTimeout(() => window.print(), 250);
@@ -86,7 +83,6 @@ export default function QuotationDetailPage() {
     return undefined;
   }, [quotation, loading, searchParams]);
 
-  // 3. Update quotation status
   const changeStatus = async (status: 'accepted' | 'rejected' | 'pending') => {
     dismissKeyboard();
     if (!quotation) return;
@@ -102,7 +98,6 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // 4. Convert quotation to invoice
   const handleConvertToInvoice = async () => {
     dismissKeyboard();
     if (!quotation) return;
@@ -117,7 +112,6 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // 5. Convert quotation to proforma invoice
   const handleConvertToProforma = async () => {
     dismissKeyboard();
     if (!quotation) return;
@@ -132,55 +126,72 @@ export default function QuotationDetailPage() {
     }
   };
 
-  // 6. Share quotation via WhatsApp with optimized PDF generation
   const shareViaWhatsApp = async () => {
     dismissKeyboard();
     if (!quotation) return;
 
     setGeneratingPdf(true);
-    const customerName = quotation.customer?.company_name || quotation.customer?.name || 'Customer';
-    const amount = formatMoney(quotation.total_amount);
-    const link = `${window.location.origin}/quotations/${quotation.id}`;
+    const fileName = `${buildQuotationFileBaseName(quotation)}.pdf`;
+    const element = document.querySelector<HTMLElement>('article.quotation-paper');
 
-    const element = document.querySelector<HTMLElement>('article.invoice-paper');
-    if (element) {
-      // Temporarily lock width to standard desktop viewport (794px A4) to prevent mobile layout distortion
-      const originalWidth = element.style.width;
-      element.style.width = '794px';
-
-      try {
-        const html2pdf = (await import('html2pdf.js')).default;
-        const opt: Record<string, unknown> = {
-          margin: [0.2, 0.2, 0.2, 0.2], // Compact margins to prevent multi-page overflow
-          filename: `${buildQuotationFileBaseName(quotation)}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            windowWidth: 1200, // Simulate desktop browser viewport
-          },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }, // Avoid slicing table rows or elements
-        };
-        await html2pdf().set(opt).from(element).save();
-      } catch (err) {
-        console.error('Failed to generate PDF:', err);
-      } finally {
-        element.style.width = originalWidth; // Restore mobile responsiveness
-        setGeneratingPdf(false);
-      }
-    } else {
+    if (!element) {
       setGeneratingPdf(false);
+      return;
     }
 
-    const message = `Hello ${customerName}, here is your quotation ${quotation.quotation_number} for total ${amount}.\n\nYou can also view it online: ${link}`;
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    const originalWidth = element.style.width;
+    element.style.width = '794px';
 
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      const opt: Record<string, unknown> = {
+        margin: [0.2, 0.2, 0.2, 0.2],
+        filename: fileName,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          windowWidth: 1200,
+        },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      };
+
+      const pdfBlob: Blob = await html2pdf().set(opt).from(element).output('blob');
+      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      const customerName = quotation.customer?.company_name || quotation.customer?.name || 'Customer';
+      const shareMessage = `Hello ${customerName}, here is your quotation ${quotation.quotation_number}.`;
+
+      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: fileName,
+          text: shareMessage,
+        });
+      } else {
+        const downloadUrl = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+
+        const onlineLink = `${window.location.origin}/quotations/${quotation.id}`;
+        const fallbackMessage = `${shareMessage}\n\nView online: ${onlineLink}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackMessage)}`, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Failed to share PDF:', err);
+      }
+    } finally {
+      element.style.width = originalWidth;
+      setGeneratingPdf(false);
+    }
   };
 
-  // 7. Dynamically set document title for printing and open browser print window
   const printQuotation = () => {
     dismissKeyboard();
     if (!quotation) {
@@ -195,7 +206,6 @@ export default function QuotationDetailPage() {
     }, 500);
   };
 
-  // 8. Duplicate current quotation as a draft
   const duplicateQuotation = () => {
     dismissKeyboard();
     if (!quotation) return;
@@ -240,9 +250,73 @@ export default function QuotationDetailPage() {
   const companyRegNo = company?.reg_no || (company as { registration_no?: string })?.registration_no || '';
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-6 pb-28 sm:pb-8 text-slate-900 sm:px-6 lg:px-8">
-      {/* Top action button toolbar (Desktop) */}
-      <div className="no-print print:hidden mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
+    <main className="min-h-screen w-full overflow-x-hidden bg-slate-100 px-3 py-6 text-slate-900 sm:px-6 lg:px-8">
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 0;
+          }
+
+          html, body {
+            width: 210mm !important;
+            height: auto !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          .no-print, nav, header, button, .mobile-action-bar {
+            display: none !important;
+          }
+
+          .quotation-paper {
+            width: 794px !important;
+            max-width: 794px !important;
+            min-width: 794px !important;
+            margin: 0 auto !important;
+            padding: 32px !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: white !important;
+          }
+
+          .quotation-paper header {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+          }
+
+          .quotation-paper section.grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .quotation-paper table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+          }
+
+          .quotation-paper footer > div {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+          }
+
+          section, table, tr, footer {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
+      {/* Header Actions */}
+      <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
         <Link href="/quotations" className="text-sm font-bold text-slate-600 hover:text-blue-700">
           ← Back to Quotations
         </Link>
@@ -295,13 +369,13 @@ export default function QuotationDetailPage() {
       </div>
 
       {errorMessage && (
-        <p className="no-print print:hidden mx-auto mb-4 max-w-4xl rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
+        <p className="no-print mx-auto mb-4 max-w-4xl rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
           {errorMessage}
         </p>
       )}
 
-      {/* Quotation printable document card */}
-      <article className="invoice-paper mx-auto max-w-4xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-10">
+      {/* Main Quotation Document */}
+      <article className="quotation-paper mx-auto w-full max-w-4xl overflow-hidden rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-10">
         <header className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-6 sm:flex-row">
           <div className="flex items-start gap-4">
             {company?.logo_url && (
@@ -318,7 +392,10 @@ export default function QuotationDetailPage() {
               </p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight">QUOTATION</h1>
               <p className="mt-1 text-sm text-slate-500">Professional quotation statement</p>
-              {companyRegNo && <p className="mt-1 text-xs text-slate-500">Reg No: {companyRegNo}</p>}
+              <p className="mt-1 text-xs text-slate-500">
+                {companyRegNo}
+                {company?.sst_no ? ` | SST: ${company.sst_no}` : ''}
+              </p>
             </div>
           </div>
           <div className="sm:text-right">
@@ -359,10 +436,10 @@ export default function QuotationDetailPage() {
           </div>
         </section>
 
-        {/* Line items section */}
+        {/* Item Table */}
         <section className="py-6">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-sm">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full min-w-[500px] text-left text-sm">
               <thead className="border-b-2 border-slate-900">
                 <tr>
                   <th className="pb-3 font-bold">Item Description</th>
@@ -373,7 +450,7 @@ export default function QuotationDetailPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {(quotation.quotation_items ?? []).map((item, index) => (
-                  <tr key={item.id ?? `${item.product_name}-${index}`} className="break-inside-avoid">
+                  <tr key={item.id ?? `${item.product_name}-${index}`}>
                     <td className="py-3 font-medium">{item.product_name}</td>
                     <td className="py-3 text-right">{item.quantity}</td>
                     <td className="py-3 text-right">{formatMoney(item.unit_price)}</td>
@@ -385,8 +462,8 @@ export default function QuotationDetailPage() {
           </div>
         </section>
 
-        {/* Summary calculations section */}
-        <section className="ml-auto max-w-sm border-t border-slate-200 pt-4 break-inside-avoid">
+        {/* Totals */}
+        <section className="ml-auto max-w-sm border-t border-slate-200 pt-4">
           <div className="flex justify-between py-1.5 text-sm">
             <span className="text-slate-500">Subtotal</span>
             <span className="font-semibold">{formatMoney(quotation.subtotal_amount)}</span>
@@ -401,8 +478,8 @@ export default function QuotationDetailPage() {
           </div>
         </section>
 
-        {/* Footer and authorization signature section */}
-        <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500 break-inside-avoid">
+        {/* Footer */}
+        <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500">
           <p>Thank you for your business.</p>
           <p className="mt-1 font-medium text-slate-700">
             Payment Terms: {quotation.payment_terms || company?.payment_terms || '30 Days'}
@@ -428,8 +505,8 @@ export default function QuotationDetailPage() {
             </div>
           )}
 
-          <div className="mt-10 grid grid-cols-2 gap-8 pt-4">
-            <div className="flex flex-col items-start justify-end">
+          <div className="mt-10 flex items-end justify-between gap-8">
+            <div className="flex flex-col items-start">
               <div className="h-16 w-48" />
               <div className="w-48 border-b border-slate-300" />
               <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -437,7 +514,7 @@ export default function QuotationDetailPage() {
               </p>
             </div>
 
-            <div className="flex flex-col items-end justify-end text-right">
+            <div className="flex flex-col items-end text-right">
               <p className="text-xs font-bold uppercase text-slate-600">
                 {company?.company_name || 'InvoiceSys'}
               </p>
@@ -460,52 +537,52 @@ export default function QuotationDetailPage() {
             </div>
           </div>
         </footer>
-
-        {/* Status indicator and quick status update controls (Hidden during print / PDF export) */}
-        <div className="no-print print:hidden mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
-          <div>
-            <span className="text-sm font-semibold text-slate-500">Status: </span>
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
-                quotationStatus === 'accepted'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : quotationStatus === 'rejected'
-                  ? 'bg-red-50 text-red-700'
-                  : quotationStatus === 'converted'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'bg-amber-50 text-amber-700'
-              }`}
-            >
-              {quotationStatus.toUpperCase()}
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={savingStatus || quotationStatus === 'accepted'}
-              onClick={() => void changeStatus('accepted')}
-              className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
-            >
-              Mark Accepted
-            </button>
-            <button
-              type="button"
-              disabled={savingStatus || quotationStatus === 'rejected'}
-              onClick={() => void changeStatus('rejected')}
-              className="rounded-xl bg-red-700 px-3 py-2 text-xs font-bold text-white hover:bg-red-800 disabled:opacity-50"
-            >
-              Mark Rejected
-            </button>
-          </div>
-        </div>
       </article>
 
-      <div className="no-print print:hidden mx-auto mt-5 max-w-4xl text-center text-xs text-slate-500">
+      {/* Status Controls Outside Paper */}
+      <div className="no-print mx-auto mt-6 flex max-w-4xl items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <div>
+          <span className="text-sm font-semibold text-slate-500">Status: </span>
+          <span
+            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+              quotationStatus === 'accepted'
+                ? 'bg-emerald-50 text-emerald-700'
+                : quotationStatus === 'rejected'
+                ? 'bg-red-50 text-red-700'
+                : quotationStatus === 'converted'
+                ? 'bg-blue-50 text-blue-700'
+                : 'bg-amber-50 text-amber-700'
+            }`}
+          >
+            {quotationStatus.toUpperCase()}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={savingStatus || quotationStatus === 'accepted'}
+            onClick={() => void changeStatus('accepted')}
+            className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+          >
+            Mark Accepted
+          </button>
+          <button
+            type="button"
+            disabled={savingStatus || quotationStatus === 'rejected'}
+            onClick={() => void changeStatus('rejected')}
+            className="rounded-xl bg-red-700 px-3 py-2 text-xs font-bold text-white hover:bg-red-800 disabled:opacity-50"
+          >
+            Mark Rejected
+          </button>
+        </div>
+      </div>
+
+      <div className="no-print mx-auto mt-5 max-w-4xl text-center text-xs text-slate-500">
         Use your browser&apos;s print dialog to save this quotation as a PDF.
       </div>
 
-      {/* Mobile Sticky Bottom Action Bar (Hidden during print / PDF export) */}
-      <div className="no-print print:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
+      {/* Mobile Action Bar */}
+      <div className="no-print mobile-action-bar fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
         <button
           type="button"
           onClick={() => void shareViaWhatsApp()}

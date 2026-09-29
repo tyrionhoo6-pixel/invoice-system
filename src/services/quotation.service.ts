@@ -1,339 +1,618 @@
-import { supabase } from '@/lib/supabase/client';
-import type { Quotation, QuotationWithItems, QuotationStatus } from '@/types/quotation';
-import type { Customer, Product } from '@/types/invoice';
+'use client';
+
+import Link from 'next/link';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useLanguage } from '@/context/LanguageContext';
+import { formatMoney } from '@/lib/utils';
+import { QuotationService } from '@/services/quotation.service';
 import type { CompanySettings } from '@/types/company';
-import { InvoiceService, type CreateInvoiceItemInput } from './invoice.service';
+import type { QuotationWithItems } from '@/types/quotation';
+import { formatDate } from '@/utils/format';
 
-export interface CreateQuotationItemInput {
-  product_id?: string | null;
-  description: string;
-  qty: number;
-  unit?: string;
-  unit_price: number;
-  subtotal: number;
+function buildQuotationFileBaseName(quotation: QuotationWithItems): string {
+  const customerNameForFile = (quotation.customer?.company_name || quotation.customer?.name || 'Customer')
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ');
+
+  return `${customerNameForFile} - ${quotation.quotation_number}`;
 }
 
-export interface CreateQuotationInput {
-  quotation_number?: string;
-  customer_id: string;
-  payment_terms?: string;
-  valid_until?: string | null;
-  total_qty: number;
-  subtotal_amount: number;
-  less_amount: number;
-  total_amount: number;
-  items: CreateQuotationItemInput[];
-}
-
-const LOCAL_DEVELOPMENT_USER_ID = '00000000-0000-0000-0000-000000000001';
-
-async function getAppUserId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (data.user) return data.user.id;
-  if (error && error.message !== 'Auth session missing!') {
-    throw new Error(`Unable to verify your Supabase session: ${error.message}`);
+function dismissKeyboard() {
+  if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
   }
-  return LOCAL_DEVELOPMENT_USER_ID;
 }
 
-export async function getCurrentUser() {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw new Error(`Unable to read your session: ${error.message}`);
-  return data.user;
-}
+export default function QuotationDetailPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { t } = useLanguage();
 
-export async function getCompanySettings(): Promise<CompanySettings | null> {
-  const userId = await getAppUserId();
-  const { data, error } = await supabase
-    .from('company_settings')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle();
+  const [quotation, setQuotation] = useState<QuotationWithItems | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [company, setCompany] = useState<CompanySettings | null>(null);
 
-  if (error) throw new Error(`Unable to load company settings: ${error.message}`);
-  if (!data) return null;
-  const row = data as CompanySettings & { registration_no?: string };
-  return { ...row, reg_no: row.reg_no ?? row.registration_no ?? '' };
-}
+  useEffect(() => {
+    let isMounted = true;
 
-function toMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
+    const loadQuotation = async () => {
+      if (!params.id) return;
+      try {
+        const [result, companySettings] = await Promise.all([
+          QuotationService.getQuotationById(params.id),
+          QuotationService.getCompanySettings(),
+        ]);
 
-export async function generateNextQuotationNumber(): Promise<string> {
-  const userId = await getAppUserId();
-  const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const prefix = `QT${yy}${mm}-`;
+        if (isMounted) {
+          if (!result) {
+            setErrorMessage('Quotation not found.');
+          }
+          setQuotation(result);
+          setCompany(companySettings);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setErrorMessage(error instanceof Error ? error.message : 'Unable to load quotation.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
 
-  const { data, error } = await supabase
-    .from('quotations')
-    .select('quotation_number')
-    .eq('user_id', userId)
-    .like('quotation_number', `${prefix}%`)
-    .order('quotation_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    void loadQuotation();
 
-  if (error) throw new Error(`Unable to read latest quotation number: ${error.message}`);
+    return () => {
+      isMounted = false;
+    };
+  }, [params.id]);
 
-  let nextSequence = 1;
-  if (data?.quotation_number) {
-    const parts = data.quotation_number.split('-');
-    if (parts.length === 2 && !isNaN(Number(parts[1]))) {
-      nextSequence = parseInt(parts[1], 10) + 1;
+  useEffect(() => {
+    if (!loading && quotation && searchParams.get('print') === '1') {
+      const printTimer = window.setTimeout(() => window.print(), 250);
+      return () => window.clearTimeout(printTimer);
     }
-  }
+    return undefined;
+  }, [quotation, loading, searchParams]);
 
-  return `${prefix}${String(nextSequence).padStart(3, '0')}`;
-}
+  const changeStatus = async (status: 'accepted' | 'rejected' | 'pending') => {
+    dismissKeyboard();
+    if (!quotation) return;
+    setSavingStatus(true);
+    setErrorMessage('');
+    try {
+      const updated = await QuotationService.updateQuotationStatus(quotation.id, status);
+      setQuotation((prev) => (prev ? { ...prev, ...updated } : null));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update status.');
+    } finally {
+      setSavingStatus(false);
+    }
+  };
 
-export async function createQuotation(quotationData: CreateQuotationInput): Promise<QuotationWithItems> {
-  const userId = await getAppUserId();
+  const handleConvertToInvoice = async () => {
+    dismissKeyboard();
+    if (!quotation) return;
+    setConverting(true);
+    setErrorMessage('');
+    try {
+      const newInvoice = await QuotationService.convertToInvoice(quotation.id);
+      router.push(`/invoices/${newInvoice.id}`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to convert to Invoice.');
+      setConverting(false);
+    }
+  };
 
-  const items = quotationData.items.map((item) => ({
-    product_id: item.product_id ?? null,
-    product_name: item.description.trim(),
-    quantity: item.qty,
-    unit: item.unit || 'pcs',
-    unit_price: toMoney(item.unit_price),
-    subtotal: toMoney(item.subtotal),
-  }));
+  const handleConvertToProforma = async () => {
+    dismissKeyboard();
+    if (!quotation) return;
+    setConverting(true);
+    setErrorMessage('');
+    try {
+      const newProforma = await QuotationService.convertToProforma(quotation.id);
+      router.push(`/invoices/${newProforma.id}`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to convert to Proforma Invoice.');
+      setConverting(false);
+    }
+  };
 
-  let attempts = 0;
-  let quotation = null;
-  let currentQuotationNumber = quotationData.quotation_number || (await generateNextQuotationNumber());
+  const shareViaWhatsApp = async () => {
+    dismissKeyboard();
+    if (!quotation) return;
 
-  while (attempts < 3) {
-    const { data, error: quotationError } = await supabase
-      .from('quotations')
-      .insert({
-        user_id: userId,
-        quotation_number: currentQuotationNumber,
-        customer_id: quotationData.customer_id,
-        payment_terms: quotationData.payment_terms || null,
-        valid_until: quotationData.valid_until || null,
-        total_qty: quotationData.total_qty,
-        subtotal_amount: toMoney(quotationData.subtotal_amount),
-        less_amount: toMoney(quotationData.less_amount),
-        total_amount: toMoney(quotationData.total_amount),
-        status: 'pending',
+    setGeneratingPdf(true);
+    const fileName = `${buildQuotationFileBaseName(quotation)}.pdf`;
+    const element = document.querySelector<HTMLElement>('article.quotation-paper');
+
+    if (!element) {
+      setGeneratingPdf(false);
+      return;
+    }
+
+    const originalWidth = element.style.width;
+    element.style.width = '794px';
+
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      const opt: Record<string, unknown> = {
+        margin: [0.2, 0.2, 0.2, 0.2],
+        filename: fileName,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          windowWidth: 1200,
+        },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      };
+
+      const pdfBlob: Blob = await html2pdf().set(opt).from(element).output('blob');
+      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      const customerName = quotation.customer?.company_name || quotation.customer?.name || 'Customer';
+      const shareMessage = `Hello ${customerName}, here is your quotation ${quotation.quotation_number}.`;
+
+      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: fileName,
+          text: shareMessage,
+        });
+      } else {
+        const downloadUrl = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+
+        const onlineLink = `${window.location.origin}/quotations/${quotation.id}`;
+        const fallbackMessage = `${shareMessage}\n\nView online: ${onlineLink}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackMessage)}`, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Failed to share PDF:', err);
+      }
+    } finally {
+      element.style.width = originalWidth;
+      setGeneratingPdf(false);
+    }
+  };
+
+  const printQuotation = () => {
+    dismissKeyboard();
+    if (!quotation) {
+      window.print();
+      return;
+    }
+    const previousTitle = document.title;
+    document.title = buildQuotationFileBaseName(quotation);
+    window.print();
+    window.setTimeout(() => {
+      document.title = previousTitle;
+    }, 500);
+  };
+
+  const duplicateQuotation = () => {
+    dismissKeyboard();
+    if (!quotation) return;
+
+    sessionStorage.setItem(
+      'quotation-duplicate-draft',
+      JSON.stringify({
+        customerId: quotation.customer_id,
+        lessAmount: Number(quotation.less_amount) || 0,
+        items: (quotation.quotation_items ?? []).map((item) => ({
+          product_id: item.product_id ?? null,
+          description: item.product_name,
+          qty: Number(item.quantity) || 1,
+          unit_price: Number(item.unit_price) || 0,
+          subtotal: Number(item.subtotal) || 0,
+        })),
       })
-      .select()
-      .single();
+    );
+    router.push('/quotations/new?duplicate=1');
+  };
 
-    if (!quotationError) {
-      quotation = data;
-      break;
-    }
-
-    if (
-      quotationError.message.includes('duplicate key') ||
-      quotationError.message.includes('quotations_user_id_quotation_number_key') ||
-      quotationError.message.includes('quotations_quotation_number_key')
-    ) {
-      attempts++;
-      currentQuotationNumber = await generateNextQuotationNumber();
-    } else {
-      throw new Error(`Unable to create quotation: ${quotationError.message}`);
-    }
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-10 text-center text-slate-500">
+        Loading...
+      </main>
+    );
   }
 
   if (!quotation) {
-    throw new Error('Unable to create quotation due to duplicate number conflicts. Please try again.');
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-10 text-center">
+        <p className="font-semibold text-red-700">{errorMessage || 'Quotation not found.'}</p>
+        <Link href="/quotations" className="mt-4 inline-flex font-bold text-blue-700">
+          Back to Quotations
+        </Link>
+      </main>
+    );
   }
 
-  const { error: itemsError } = await supabase
-    .from('quotation_items')
-    .insert(items.map((item) => ({ ...item, quotation_id: quotation.id })));
+  const quotationStatus = (quotation.status ?? 'pending').toLowerCase();
+  const companyRegNo = company?.reg_no || (company as { registration_no?: string })?.registration_no || '';
 
-  if (itemsError) {
-    await supabase.from('quotations').update({ is_deleted: true }).eq('id', quotation.id);
-    throw new Error(`Unable to create quotation items: ${itemsError.message}`);
-  }
+  return (
+    <main className="min-h-screen w-full overflow-x-hidden bg-slate-100 px-3 py-6 text-slate-900 sm:px-6 lg:px-8">
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 0;
+          }
 
-  return {
-    ...quotation,
-    quotation_items: items,
-  } as QuotationWithItems;
+          html, body {
+            width: 210mm !important;
+            height: auto !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          .no-print, nav, header, button, .mobile-action-bar {
+            display: none !important;
+          }
+
+          .quotation-paper {
+            width: 794px !important;
+            max-width: 794px !important;
+            min-width: 794px !important;
+            margin: 0 auto !important;
+            padding: 32px !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: white !important;
+          }
+
+          .quotation-paper header {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+          }
+
+          .quotation-paper section.grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .quotation-paper table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+          }
+
+          .quotation-paper footer > div {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+          }
+
+          section, table, tr, footer {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
+      {/* Header Actions */}
+      <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
+        <Link href="/quotations" className="text-sm font-bold text-slate-600 hover:text-blue-700">
+          ← Back to Quotations
+        </Link>
+        <div className="hidden sm:flex sm:flex-wrap sm:gap-2">
+          <button
+            type="button"
+            disabled={converting}
+            onClick={handleConvertToInvoice}
+            className="min-h-11 rounded-xl bg-blue-700 px-4 text-sm font-bold text-white shadow-sm hover:bg-blue-800 disabled:opacity-50"
+          >
+            {converting ? 'Converting...' : 'Convert to Invoice'}
+          </button>
+          <button
+            type="button"
+            disabled={converting}
+            onClick={handleConvertToProforma}
+            className="min-h-11 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {converting ? 'Converting...' : 'Convert to Proforma'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void shareViaWhatsApp()}
+            disabled={generatingPdf}
+            className="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {generatingPdf ? 'Generating PDF...' : 'Share WhatsApp'}
+          </button>
+          <button
+            type="button"
+            onClick={duplicateQuotation}
+            className="min-h-11 rounded-xl bg-white px-4 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+          >
+            Duplicate
+          </button>
+          <Link
+            href={`/quotations/new?id=${quotation.id}`}
+            className="inline-flex min-h-11 items-center rounded-xl bg-slate-800 px-4 text-sm font-bold text-white shadow-sm hover:bg-slate-900"
+          >
+            Edit
+          </Link>
+          <button
+            type="button"
+            onClick={printQuotation}
+            className="min-h-11 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
+          >
+            Print / PDF
+          </button>
+        </div>
+      </div>
+
+      {errorMessage && (
+        <p className="no-print mx-auto mb-4 max-w-4xl rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
+          {errorMessage}
+        </p>
+      )}
+
+      {/* Main Quotation Document */}
+      <article className="quotation-paper mx-auto w-full max-w-4xl overflow-hidden rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-10">
+        <header className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-6 sm:flex-row">
+          <div className="flex items-start gap-4">
+            {company?.logo_url && (
+              <img
+                src={company.logo_url}
+                alt="Company logo"
+                crossOrigin="anonymous"
+                className="h-16 w-16 object-contain"
+              />
+            )}
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-blue-700">
+                {company?.company_name || 'InvoiceSys'}
+              </p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight">QUOTATION</h1>
+              <p className="mt-1 text-sm text-slate-500">Professional quotation statement</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {companyRegNo}
+                {company?.sst_no ? ` | SST: ${company.sst_no}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="sm:text-right">
+            <p className="text-sm font-bold text-slate-500">Quotation Number</p>
+            <p className="mt-1 text-2xl font-bold">{quotation.quotation_number}</p>
+            <p className="mt-2 text-sm text-slate-500">Issued: {formatDate(quotation.created_at)}</p>
+          </div>
+        </header>
+
+        <section className="grid gap-6 border-b border-slate-200 py-6 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">From</p>
+            <p className="mt-2 font-bold">{company?.company_name || 'InvoiceSys'}</p>
+            <p className="whitespace-pre-line text-sm text-slate-500">{company?.address || ''}</p>
+            <p className="text-sm text-slate-500">
+              {company?.phone || ''} {company?.email ? `| ${company.email}` : ''}
+            </p>
+          </div>
+          <div className="sm:text-right">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Quotation For</p>
+            <p className="mt-2 font-bold">
+              {quotation.customer?.company_name || quotation.customer?.name || 'Customer'}
+            </p>
+            {quotation.customer?.name &&
+              quotation.customer?.company_name &&
+              quotation.customer.name.trim().toLowerCase() !==
+                quotation.customer.company_name.trim().toLowerCase() && (
+                <p className="text-sm text-slate-500">Attn: {quotation.customer.name}</p>
+              )}
+            {quotation.customer?.address && (
+              <p className="whitespace-pre-line text-sm text-slate-500">
+                {quotation.customer.address}
+              </p>
+            )}
+            {quotation.customer?.phone && (
+              <p className="text-sm text-slate-500">{quotation.customer.phone}</p>
+            )}
+          </div>
+        </section>
+
+        {/* Item Table */}
+        <section className="py-6">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full min-w-[500px] text-left text-sm">
+              <thead className="border-b-2 border-slate-900">
+                <tr>
+                  <th className="pb-3 font-bold">Item Description</th>
+                  <th className="pb-3 text-right font-bold">Qty</th>
+                  <th className="pb-3 text-right font-bold">Unit Price</th>
+                  <th className="pb-3 text-right font-bold">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(quotation.quotation_items ?? []).map((item, index) => (
+                  <tr key={item.id ?? `${item.product_name}-${index}`}>
+                    <td className="py-3 font-medium">{item.product_name}</td>
+                    <td className="py-3 text-right">{item.quantity}</td>
+                    <td className="py-3 text-right">{formatMoney(item.unit_price)}</td>
+                    <td className="py-3 text-right font-semibold">{formatMoney(item.subtotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Totals */}
+        <section className="ml-auto max-w-sm border-t border-slate-200 pt-4">
+          <div className="flex justify-between py-1.5 text-sm">
+            <span className="text-slate-500">Subtotal</span>
+            <span className="font-semibold">{formatMoney(quotation.subtotal_amount)}</span>
+          </div>
+          <div className="flex justify-between py-1.5 text-sm">
+            <span className="text-slate-500">Discount</span>
+            <span className="font-semibold">-{formatMoney(quotation.less_amount)}</span>
+          </div>
+          <div className="mt-2 flex justify-between border-t-2 border-slate-900 pt-3 text-lg">
+            <span className="font-bold">Total Amount</span>
+            <span className="font-bold">{formatMoney(quotation.total_amount)}</span>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="mt-8 border-t border-slate-200 pt-4 text-sm text-slate-500">
+          <p>Thank you for your business.</p>
+          <p className="mt-1 font-medium text-slate-700">
+            Payment Terms: {quotation.payment_terms || company?.payment_terms || '30 Days'}
+          </p>
+
+          {(company?.bank_name || company?.bank_account_no || company?.bank_account_holder) && (
+            <div className="mt-3 space-y-0.5 text-sm text-slate-700">
+              {company.bank_name && (
+                <p>
+                  <span className="font-semibold">Bank Name:</span> {company.bank_name}
+                </p>
+              )}
+              {company.bank_account_no && (
+                <p>
+                  <span className="font-semibold">Bank Account:</span> {company.bank_account_no}
+                </p>
+              )}
+              {company.bank_account_holder && (
+                <p>
+                  <span className="font-semibold">Bank Holder:</span> {company.bank_account_holder}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-10 flex items-end justify-between gap-8">
+            <div className="flex flex-col items-start">
+              <div className="h-16 w-48" />
+              <div className="w-48 border-b border-slate-300" />
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Customer Acceptance / Signature
+              </p>
+            </div>
+
+            <div className="flex flex-col items-end text-right">
+              <p className="text-xs font-bold uppercase text-slate-600">
+                {company?.company_name || 'InvoiceSys'}
+              </p>
+
+              <div className="mt-2 flex h-16 w-48 items-center justify-center">
+                {company?.signature_url ? (
+                  <img
+                    src={company.signature_url}
+                    alt="Authorized Signature"
+                    crossOrigin="anonymous"
+                    className="max-h-16 max-w-full object-contain"
+                  />
+                ) : (
+                  <div className="h-12" />
+                )}
+              </div>
+
+              <div className="ml-auto w-48 border-b border-slate-300" />
+              <p className="mt-1 text-xs font-semibold text-slate-500">Authorized Signature</p>
+            </div>
+          </div>
+        </footer>
+      </article>
+
+      {/* Status Controls Outside Paper */}
+      <div className="no-print mx-auto mt-6 flex max-w-4xl items-center justify-between rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <div>
+          <span className="text-sm font-semibold text-slate-500">Status: </span>
+          <span
+            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+              quotationStatus === 'accepted'
+                ? 'bg-emerald-50 text-emerald-700'
+                : quotationStatus === 'rejected'
+                ? 'bg-red-50 text-red-700'
+                : quotationStatus === 'converted'
+                ? 'bg-blue-50 text-blue-700'
+                : 'bg-amber-50 text-amber-700'
+            }`}
+          >
+            {quotationStatus.toUpperCase()}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={savingStatus || quotationStatus === 'accepted'}
+            onClick={() => void changeStatus('accepted')}
+            className="rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+          >
+            Mark Accepted
+          </button>
+          <button
+            type="button"
+            disabled={savingStatus || quotationStatus === 'rejected'}
+            onClick={() => void changeStatus('rejected')}
+            className="rounded-xl bg-red-700 px-3 py-2 text-xs font-bold text-white hover:bg-red-800 disabled:opacity-50"
+          >
+            Mark Rejected
+          </button>
+        </div>
+      </div>
+
+      <div className="no-print mx-auto mt-5 max-w-4xl text-center text-xs text-slate-500">
+        Use your browser&apos;s print dialog to save this quotation as a PDF.
+      </div>
+
+      {/* Mobile Action Bar */}
+      <div className="no-print mobile-action-bar fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
+        <button
+          type="button"
+          onClick={() => void shareViaWhatsApp()}
+          disabled={generatingPdf}
+          className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {generatingPdf ? 'PDF...' : 'WhatsApp'}
+        </button>
+        <button
+          type="button"
+          disabled={converting}
+          onClick={handleConvertToInvoice}
+          className="flex-1 rounded-lg bg-blue-700 py-2.5 text-xs font-bold text-white shadow hover:bg-blue-800 disabled:opacity-50"
+        >
+          {converting ? '...' : 'Invoice'}
+        </button>
+        <Link
+          href={`/quotations/new?id=${quotation.id}`}
+          className="flex-1 text-center rounded-lg bg-slate-800 py-2.5 text-xs font-bold text-white shadow hover:bg-slate-900"
+        >
+          Edit
+        </Link>
+        <button
+          type="button"
+          onClick={printQuotation}
+          className="flex-1 rounded-lg bg-slate-900 py-2.5 text-xs font-bold text-white shadow hover:bg-slate-800"
+        >
+          Print
+        </button>
+      </div>
+    </main>
+  );
 }
-
-export async function updateQuotation(id: string, quotationData: CreateQuotationInput): Promise<QuotationWithItems> {
-  const userId = await getAppUserId();
-
-  const items = quotationData.items.map((item) => ({
-    quotation_id: id,
-    product_id: item.product_id ?? null,
-    product_name: item.description.trim(),
-    quantity: item.qty,
-    unit: item.unit || 'pcs',
-    unit_price: toMoney(item.unit_price),
-    subtotal: toMoney(item.subtotal),
-  }));
-
-  const { data: quotation, error: quotationError } = await supabase
-    .from('quotations')
-    .update({
-      customer_id: quotationData.customer_id,
-      payment_terms: quotationData.payment_terms || null,
-      valid_until: quotationData.valid_until || null,
-      total_qty: quotationData.total_qty,
-      subtotal_amount: toMoney(quotationData.subtotal_amount),
-      less_amount: toMoney(quotationData.less_amount),
-      total_amount: toMoney(quotationData.total_amount),
-    })
-    .eq('id', id)
-    .eq('user_id', userId)
-    .select()
-    .single();
-
-  if (quotationError) throw new Error(`Unable to update quotation: ${quotationError.message}`);
-
-  const { error: deleteError } = await supabase.from('quotation_items').delete().eq('quotation_id', id);
-  if (deleteError) throw new Error(`Unable to clear previous quotation items: ${deleteError.message}`);
-
-  const { error: insertError } = await supabase.from('quotation_items').insert(items);
-  if (insertError) throw new Error(`Unable to save updated quotation items: ${insertError.message}`);
-
-  return {
-    ...quotation,
-    quotation_items: items,
-  } as QuotationWithItems;
-}
-
-export async function getQuotations(): Promise<Quotation[]> {
-  const userId = await getAppUserId();
-  const { data, error } = await supabase
-    .from('quotations')
-    .select('*, customer:customers(*)')
-    .eq('user_id', userId)
-    .or('is_deleted.eq.false,is_deleted.is.null')
-    .order('created_at', { ascending: false });
-
-  if (error) throw new Error(`Unable to load quotations: ${error.message}`);
-  return (data ?? []) as Quotation[];
-}
-
-export async function getQuotationById(id: string): Promise<QuotationWithItems | null> {
-  const { data, error } = await supabase
-    .from('quotations')
-    .select('*, customer:customers(*), quotation_items(*)')
-    .eq('id', id)
-    .or('is_deleted.eq.false,is_deleted.is.null')
-    .maybeSingle();
-
-  if (error) throw new Error(`Unable to load quotation: ${error.message}`);
-  return data as QuotationWithItems | null;
-}
-
-export async function updateQuotationStatus(id: string, status: QuotationStatus): Promise<Quotation> {
-  const { data, error } = await supabase
-    .from('quotations')
-    .update({ status })
-    .eq('id', id)
-    .select('*, customer:customers(*)')
-    .single();
-
-  if (error) throw new Error(`Unable to update quotation status: ${error.message}`);
-  return data as Quotation;
-}
-
-export async function convertToInvoice(quotationId: string) {
-  const quotation = await getQuotationById(quotationId);
-  if (!quotation) throw new Error('Quotation not found');
-
-  const invoiceItems: CreateInvoiceItemInput[] = (quotation.quotation_items || []).map((item) => ({
-    product_id: item.product_id,
-    description: item.product_name,
-    qty: item.quantity,
-    unit: item.unit,
-    unit_price: item.unit_price,
-    subtotal: item.subtotal,
-  }));
-
-  const createdInvoice = await InvoiceService.createInvoice({
-    invoice_type: 'standard',
-    customer_id: quotation.customer_id,
-    payment_terms: quotation.payment_terms || undefined,
-    total_qty: quotation.total_qty,
-    subtotal_amount: quotation.subtotal_amount,
-    less_amount: quotation.less_amount,
-    total_amount: quotation.total_amount,
-    items: invoiceItems,
-  });
-
-  await updateQuotationStatus(quotationId, 'converted');
-  return createdInvoice;
-}
-
-export async function convertToProforma(quotationId: string) {
-  const quotation = await getQuotationById(quotationId);
-  if (!quotation) throw new Error('Quotation not found');
-
-  const invoiceItems: CreateInvoiceItemInput[] = (quotation.quotation_items || []).map((item) => ({
-    product_id: item.product_id,
-    description: item.product_name,
-    qty: item.quantity,
-    unit: item.unit,
-    unit_price: item.unit_price,
-    subtotal: item.subtotal,
-  }));
-
-  const createdProforma = await InvoiceService.createInvoice({
-    invoice_type: 'proforma',
-    customer_id: quotation.customer_id,
-    payment_terms: quotation.payment_terms || undefined,
-    total_qty: quotation.total_qty,
-    subtotal_amount: quotation.subtotal_amount,
-    less_amount: quotation.less_amount,
-    total_amount: quotation.total_amount,
-    items: invoiceItems,
-  });
-
-  await updateQuotationStatus(quotationId, 'converted');
-  return createdProforma;
-}
-
-export async function deleteQuotation(id: string): Promise<void> {
-  const userId = await getAppUserId();
-  const { error } = await supabase
-    .from('quotations')
-    .update({ is_deleted: true })
-    .eq('id', id)
-    .eq('user_id', userId);
-
-  if (error) throw new Error(`Unable to delete quotation: ${error.message}`);
-}
-
-export async function getCustomers(): Promise<Customer[]> {
-  return InvoiceService.getCustomers();
-}
-
-export async function createCustomer(
-  customer: Parameters<typeof InvoiceService.createCustomer>[0]
-): Promise<Customer> {
-  return InvoiceService.createCustomer(customer);
-}
-
-export async function getProducts(): Promise<Product[]> {
-  return InvoiceService.getProducts();
-}
-
-export const QuotationService = {
-  generateNextQuotationNumber,
-  createQuotation,
-  updateQuotation,
-  getQuotations,
-  getQuotationById,
-  updateQuotationStatus,
-  convertToInvoice,
-  convertToProforma,
-  deleteQuotation,
-  getCustomers: () => InvoiceService.getCustomers(),
-  createCustomer: (customer: Parameters<typeof InvoiceService.createCustomer>[0]) => 
-    InvoiceService.createCustomer(customer),
-  getProducts: () => InvoiceService.getProducts(),
-  getCurrentUser,
-  getCompanySettings,
-};
