@@ -132,7 +132,7 @@ export default function QuotationDetailPage() {
     }
   };
 
-// 6. Share quotation via WhatsApp with optimized PDF generation
+  // 6. Share quotation via WhatsApp with optimized PDF generation
   const shareViaWhatsApp = async () => {
     dismissKeyboard();
     if (!quotation) return;
@@ -242,7 +242,7 @@ export default function QuotationDetailPage() {
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 pb-28 sm:pb-8 text-slate-900 sm:px-6 lg:px-8">
       {/* Top action button toolbar (Desktop) */}
-      <div className="no-print mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
+      <div className="no-print print:hidden mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3">
         <Link href="/quotations" className="text-sm font-bold text-slate-600 hover:text-blue-700">
           ← Back to Quotations
         </Link>
@@ -295,7 +295,7 @@ export default function QuotationDetailPage() {
       </div>
 
       {errorMessage && (
-        <p className="no-print mx-auto mb-4 max-w-4xl rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
+        <p className="no-print print:hidden mx-auto mb-4 max-w-4xl rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
           {errorMessage}
         </p>
       )}
@@ -461,8 +461,8 @@ export default function QuotationDetailPage() {
           </div>
         </footer>
 
-        {/* Status indicator and quick status update controls */}
-        <div className="no-print mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
+        {/* Status indicator and quick status update controls (Hidden during print / PDF export) */}
+        <div className="no-print print:hidden mt-8 flex items-center justify-between border-t border-slate-200 pt-6">
           <div>
             <span className="text-sm font-semibold text-slate-500">Status: </span>
             <span
@@ -500,12 +500,12 @@ export default function QuotationDetailPage() {
         </div>
       </article>
 
-      <div className="no-print mx-auto mt-5 max-w-4xl text-center text-xs text-slate-500">
+      <div className="no-print print:hidden mx-auto mt-5 max-w-4xl text-center text-xs text-slate-500">
         Use your browser&apos;s print dialog to save this quotation as a PDF.
       </div>
 
-      {/* Mobile Sticky Bottom Action Bar (Easy access on phones without keyboard obstruction) */}
-      <div className="no-print fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
+      {/* Mobile Sticky Bottom Action Bar (Hidden during print / PDF export) */}
+      <div className="no-print print:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
         <button
           type="button"
           onClick={() => void shareViaWhatsApp()}

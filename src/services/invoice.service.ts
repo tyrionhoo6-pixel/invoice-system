@@ -129,12 +129,12 @@ export async function generateNextInvoiceNumber(): Promise<string> {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const prefix = `IV${yy}${mm}-`;
 
+  // 已移除 is_deleted 条件，避免重复生成已删除的单号
   const { data, error } = await supabase
     .from('invoices')
     .select('invoice_number')
     .eq('user_id', userId)
     .like('invoice_number', `${prefix}%`)
-    .or('is_deleted.eq.false,is_deleted.is.null')
     .order('invoice_number', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -159,12 +159,12 @@ export async function generateNextProformaNumber(): Promise<string> {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const prefix = `PI${yy}${mm}-`;
 
+  // 已移除 is_deleted 条件
   const { data, error } = await supabase
     .from('invoices')
     .select('invoice_number')
     .eq('user_id', userId)
     .like('invoice_number', `${prefix}%`)
-    .or('is_deleted.eq.false,is_deleted.is.null')
     .order('invoice_number', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -185,13 +185,6 @@ export async function generateNextProformaNumber(): Promise<string> {
 export async function createInvoice(invoiceData: CreateInvoiceInput): Promise<InvoiceWithItems> {
   const userId = await getAppUserId();
   const invoiceType = invoiceData.invoice_type || 'standard';
-  
-  let invoiceNumber = invoiceData.invoice_number;
-  if (!invoiceNumber) {
-    invoiceNumber = invoiceType === 'proforma' 
-      ? await generateNextProformaNumber() 
-      : await generateNextInvoiceNumber();
-  }
 
   const items = invoiceData.items.map((item) => ({
     product_id: item.product_id ?? null,
@@ -202,25 +195,56 @@ export async function createInvoice(invoiceData: CreateInvoiceInput): Promise<In
     subtotal: toMoney(item.subtotal),
   }));
 
-  const { data: invoice, error: invoiceError } = await supabase
-    .from('invoices')
-    .insert({
-      user_id: userId,
-      invoice_number: invoiceNumber,
-      invoice_type: invoiceType,
-      customer_id: invoiceData.customer_id,
-      payment_terms: invoiceData.payment_terms || null,
-      requires_customer_signature: invoiceData.requires_customer_signature ?? false,
-      total_qty: invoiceData.total_qty,
-      subtotal_amount: toMoney(invoiceData.subtotal_amount),
-      less_amount: toMoney(invoiceData.less_amount),
-      total_amount: toMoney(invoiceData.total_amount),
-      status: 'unpaid',
-    })
-    .select()
-    .single();
+  let attempts = 0;
+  let invoice = null;
+  let currentInvoiceNumber = invoiceData.invoice_number || (
+    invoiceType === 'proforma' 
+      ? await generateNextProformaNumber() 
+      : await generateNextInvoiceNumber()
+  );
 
-  if (invoiceError) throw new Error(`Unable to create invoice: ${invoiceError.message}`);
+  // 单号冲突自动重试机制
+  while (attempts < 3) {
+    const { data, error: invoiceError } = await supabase
+      .from('invoices')
+      .insert({
+        user_id: userId,
+        invoice_number: currentInvoiceNumber,
+        invoice_type: invoiceType,
+        customer_id: invoiceData.customer_id,
+        payment_terms: invoiceData.payment_terms || null,
+        requires_customer_signature: invoiceData.requires_customer_signature ?? false,
+        total_qty: invoiceData.total_qty,
+        subtotal_amount: toMoney(invoiceData.subtotal_amount),
+        less_amount: toMoney(invoiceData.less_amount),
+        total_amount: toMoney(invoiceData.total_amount),
+        status: 'unpaid',
+      })
+      .select()
+      .single();
+
+    if (!invoiceError) {
+      invoice = data;
+      break;
+    }
+
+    if (
+      invoiceError.message.includes('duplicate key') ||
+      invoiceError.message.includes('invoices_user_id_invoice_number_key') ||
+      invoiceError.message.includes('invoices_invoice_number_key')
+    ) {
+      attempts++;
+      currentInvoiceNumber = invoiceType === 'proforma' 
+        ? await generateNextProformaNumber() 
+        : await generateNextInvoiceNumber();
+    } else {
+      throw new Error(`Unable to create invoice: ${invoiceError.message}`);
+    }
+  }
+
+  if (!invoice) {
+    throw new Error('Unable to create invoice due to duplicate number conflicts. Please try again.');
+  }
 
   const { error: itemsError } = await supabase
     .from('invoice_items')
@@ -284,10 +308,7 @@ export async function convertProformaToInvoice(proformaId: string): Promise<Invo
   const proforma = await getInvoiceById(proformaId);
   if (!proforma) throw new Error('Proforma invoice not found');
 
-  const newInvoiceNumber = await generateNextInvoiceNumber();
-
   const createInput: CreateInvoiceInput = {
-    invoice_number: newInvoiceNumber,
     invoice_type: 'standard',
     customer_id: proforma.customer_id,
     payment_terms: proforma.payment_terms || undefined,

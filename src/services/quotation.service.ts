@@ -72,7 +72,6 @@ export async function generateNextQuotationNumber(): Promise<string> {
     .select('quotation_number')
     .eq('user_id', userId)
     .like('quotation_number', `${prefix}%`)
-    .or('is_deleted.eq.false,is_deleted.is.null')
     .order('quotation_number', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -92,7 +91,6 @@ export async function generateNextQuotationNumber(): Promise<string> {
 
 export async function createQuotation(quotationData: CreateQuotationInput): Promise<QuotationWithItems> {
   const userId = await getAppUserId();
-  const quotationNumber = quotationData.quotation_number || (await generateNextQuotationNumber());
 
   const items = quotationData.items.map((item) => ({
     product_id: item.product_id ?? null,
@@ -103,24 +101,48 @@ export async function createQuotation(quotationData: CreateQuotationInput): Prom
     subtotal: toMoney(item.subtotal),
   }));
 
-  const { data: quotation, error: quotationError } = await supabase
-    .from('quotations')
-    .insert({
-      user_id: userId,
-      quotation_number: quotationNumber,
-      customer_id: quotationData.customer_id,
-      payment_terms: quotationData.payment_terms || null,
-      valid_until: quotationData.valid_until || null,
-      total_qty: quotationData.total_qty,
-      subtotal_amount: toMoney(quotationData.subtotal_amount),
-      less_amount: toMoney(quotationData.less_amount),
-      total_amount: toMoney(quotationData.total_amount),
-      status: 'pending',
-    })
-    .select()
-    .single();
+  let attempts = 0;
+  let quotation = null;
+  let currentQuotationNumber = quotationData.quotation_number || (await generateNextQuotationNumber());
 
-  if (quotationError) throw new Error(`Unable to create quotation: ${quotationError.message}`);
+  while (attempts < 3) {
+    const { data, error: quotationError } = await supabase
+      .from('quotations')
+      .insert({
+        user_id: userId,
+        quotation_number: currentQuotationNumber,
+        customer_id: quotationData.customer_id,
+        payment_terms: quotationData.payment_terms || null,
+        valid_until: quotationData.valid_until || null,
+        total_qty: quotationData.total_qty,
+        subtotal_amount: toMoney(quotationData.subtotal_amount),
+        less_amount: toMoney(quotationData.less_amount),
+        total_amount: toMoney(quotationData.total_amount),
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (!quotationError) {
+      quotation = data;
+      break;
+    }
+
+    if (
+      quotationError.message.includes('duplicate key') ||
+      quotationError.message.includes('quotations_user_id_quotation_number_key') ||
+      quotationError.message.includes('quotations_quotation_number_key')
+    ) {
+      attempts++;
+      currentQuotationNumber = await generateNextQuotationNumber();
+    } else {
+      throw new Error(`Unable to create quotation: ${quotationError.message}`);
+    }
+  }
+
+  if (!quotation) {
+    throw new Error('Unable to create quotation due to duplicate number conflicts. Please try again.');
+  }
 
   const { error: itemsError } = await supabase
     .from('quotation_items')
