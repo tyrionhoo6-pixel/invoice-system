@@ -17,6 +17,9 @@ export interface CreateQuotationInput {
   quotation_number?: string;
   customer_id: string;
   payment_terms?: string;
+  outlet?: string | null;
+  state?: string | null;
+  internal_remark?: string | null;
   valid_until?: string | null;
   total_qty: number;
   subtotal_amount: number;
@@ -113,6 +116,9 @@ export async function createQuotation(quotationData: CreateQuotationInput): Prom
         quotation_number: currentQuotationNumber,
         customer_id: quotationData.customer_id,
         payment_terms: quotationData.payment_terms || null,
+        outlet: quotationData.outlet?.trim() || null,
+        state: quotationData.state?.trim() || null,
+        internal_remark: quotationData.internal_remark?.trim() || null,
         valid_until: quotationData.valid_until || null,
         total_qty: quotationData.total_qty,
         subtotal_amount: toMoney(quotationData.subtotal_amount),
@@ -177,6 +183,9 @@ export async function updateQuotation(id: string, quotationData: CreateQuotation
     .update({
       customer_id: quotationData.customer_id,
       payment_terms: quotationData.payment_terms || null,
+      outlet: quotationData.outlet?.trim() || null,
+      state: quotationData.state?.trim() || null,
+      internal_remark: quotationData.internal_remark?.trim() || null,
       valid_until: quotationData.valid_until || null,
       total_qty: quotationData.total_qty,
       subtotal_amount: toMoney(quotationData.subtotal_amount),
@@ -256,6 +265,9 @@ export async function convertToInvoice(quotationId: string) {
     invoice_type: 'standard',
     customer_id: quotation.customer_id,
     payment_terms: quotation.payment_terms || undefined,
+    outlet: quotation.outlet,
+    state: quotation.state,
+    internal_remark: quotation.internal_remark,
     total_qty: quotation.total_qty,
     subtotal_amount: quotation.subtotal_amount,
     less_amount: quotation.less_amount,
@@ -284,6 +296,9 @@ export async function convertToProforma(quotationId: string) {
     invoice_type: 'proforma',
     customer_id: quotation.customer_id,
     payment_terms: quotation.payment_terms || undefined,
+    outlet: quotation.outlet,
+    state: quotation.state,
+    internal_remark: quotation.internal_remark,
     total_qty: quotation.total_qty,
     subtotal_amount: quotation.subtotal_amount,
     less_amount: quotation.less_amount,

@@ -177,6 +177,9 @@ export default function InvoiceDetailPage() {
       JSON.stringify({
         customerId: invoice.customer_id,
         lessAmount: Number(invoice.less_amount) || 0,
+        outlet: invoice.outlet || '',
+        state: invoice.state || '',
+        internalRemark: invoice.internal_remark || '',
         items: (invoice.invoice_items ?? []).map((item) => ({
           product_id: item.product_id ?? null,
           description: item.product_name,
@@ -357,6 +360,23 @@ export default function InvoiceDetailPage() {
         <p className="no-print mx-auto mb-4 max-w-4xl rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
           {errorMessage}
         </p>
+      )}
+
+      {(invoice.outlet || invoice.state || invoice.internal_remark) && (
+        <section className="no-print mx-auto mb-4 max-w-4xl rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          {(invoice.outlet || invoice.state) && (
+            <p className="text-sm font-semibold text-slate-600">
+              {[invoice.outlet && `${t.invoice.outlet}: ${invoice.outlet}`, invoice.state && `${t.invoice.state}: ${invoice.state}`]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
+          {invoice.internal_remark && (
+            <p className="mt-2 whitespace-pre-wrap text-sm text-amber-900">
+              <span className="font-bold">{t.invoice.internalRemark}:</span> {invoice.internal_remark}
+            </p>
+          )}
+        </section>
       )}
 
       {/* Main Invoice Document */}

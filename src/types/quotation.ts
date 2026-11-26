@@ -14,6 +14,9 @@ export interface Quotation {
   total_amount: number;
   status: QuotationStatus;
   payment_terms?: string | null;
+  outlet?: string | null;
+  state?: string | null;
+  internal_remark?: string | null;
   created_at?: string;
   customer?: Customer;
   is_deleted?: boolean;

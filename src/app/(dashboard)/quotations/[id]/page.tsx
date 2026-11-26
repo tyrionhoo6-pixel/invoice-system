@@ -215,6 +215,9 @@ export default function QuotationDetailPage() {
       JSON.stringify({
         customerId: quotation.customer_id,
         lessAmount: Number(quotation.less_amount) || 0,
+        outlet: quotation.outlet || '',
+        state: quotation.state || '',
+        internalRemark: quotation.internal_remark || '',
         items: (quotation.quotation_items ?? []).map((item) => ({
           product_id: item.product_id ?? null,
           description: item.product_name,
@@ -372,6 +375,23 @@ export default function QuotationDetailPage() {
         <p className="no-print mx-auto mb-4 max-w-4xl rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
           {errorMessage}
         </p>
+      )}
+
+      {(quotation.outlet || quotation.state || quotation.internal_remark) && (
+        <section className="no-print mx-auto mb-4 max-w-4xl rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          {(quotation.outlet || quotation.state) && (
+            <p className="text-sm font-semibold text-slate-600">
+              {[quotation.outlet && `${t.invoice.outlet}: ${quotation.outlet}`, quotation.state && `${t.invoice.state}: ${quotation.state}`]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
+          {quotation.internal_remark && (
+            <p className="mt-2 whitespace-pre-wrap text-sm text-amber-900">
+              <span className="font-bold">{t.invoice.internalRemark}:</span> {quotation.internal_remark}
+            </p>
+          )}
+        </section>
       )}
 
       {/* Main Quotation Document */}

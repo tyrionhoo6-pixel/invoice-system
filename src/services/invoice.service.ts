@@ -17,6 +17,9 @@ export interface CreateInvoiceInput {
   invoice_type?: InvoiceType;
   customer_id: string;
   payment_terms?: string;
+  outlet?: string | null;
+  state?: string | null;
+  internal_remark?: string | null;
   requires_customer_signature?: boolean;
   total_qty: number;
   subtotal_amount: number;
@@ -213,6 +216,9 @@ export async function createInvoice(invoiceData: CreateInvoiceInput): Promise<In
         invoice_type: invoiceType,
         customer_id: invoiceData.customer_id,
         payment_terms: invoiceData.payment_terms || null,
+        outlet: invoiceData.outlet?.trim() || null,
+        state: invoiceData.state?.trim() || null,
+        internal_remark: invoiceData.internal_remark?.trim() || null,
         requires_customer_signature: invoiceData.requires_customer_signature ?? false,
         total_qty: invoiceData.total_qty,
         subtotal_amount: toMoney(invoiceData.subtotal_amount),
@@ -279,6 +285,9 @@ export async function updateInvoice(id: string, invoiceData: CreateInvoiceInput)
     .update({
       customer_id: invoiceData.customer_id,
       payment_terms: invoiceData.payment_terms || null,
+      outlet: invoiceData.outlet?.trim() || null,
+      state: invoiceData.state?.trim() || null,
+      internal_remark: invoiceData.internal_remark?.trim() || null,
       requires_customer_signature: invoiceData.requires_customer_signature ?? false,
       total_qty: invoiceData.total_qty,
       subtotal_amount: toMoney(invoiceData.subtotal_amount),
@@ -312,6 +321,9 @@ export async function convertProformaToInvoice(proformaId: string): Promise<Invo
     invoice_type: 'standard',
     customer_id: proforma.customer_id,
     payment_terms: proforma.payment_terms || undefined,
+    outlet: proforma.outlet,
+    state: proforma.state,
+    internal_remark: proforma.internal_remark,
     requires_customer_signature: proforma.requires_customer_signature ?? false,
     total_qty: proforma.total_qty,
     subtotal_amount: proforma.subtotal_amount,
@@ -389,7 +401,17 @@ export async function deleteInvoice(id: string): Promise<void> {
 
 export type CustomerInput = Pick<
   Customer,
-  'name' | 'company_name' | 'contact_person' | 'email' | 'phone' | 'address' | 'registration_no' | 'reg_no' | 'sst_no'
+  | 'name'
+  | 'company_name'
+  | 'contact_person'
+  | 'email'
+  | 'phone'
+  | 'address'
+  | 'outlet'
+  | 'state'
+  | 'registration_no'
+  | 'reg_no'
+  | 'sst_no'
 >;
 
 function optionalCustomerValue(value: string | null | undefined): string | null {
@@ -406,6 +428,8 @@ function customerPayload(customer: CustomerInput, userId: string) {
     email: optionalCustomerValue(customer.email),
     phone: optionalCustomerValue(customer.phone),
     address: optionalCustomerValue(customer.address),
+    outlet: optionalCustomerValue(customer.outlet),
+    state: optionalCustomerValue(customer.state),
     registration_no: optionalCustomerValue(customer.registration_no ?? customer.reg_no),
     sst_no: optionalCustomerValue(customer.sst_no),
   };

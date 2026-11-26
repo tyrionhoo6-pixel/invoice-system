@@ -22,6 +22,7 @@ export default function SiteHeader() {
     { href: '/', label: t.navigation.dashboard },
     { href: '/quotations', label: t.navigation.quotations },
     { href: '/invoices', label: t.navigation.invoices },
+    { href: '/statements', label: t.navigation.statements },
     { href: '/delivery-orders', label: t.navigation.deliveryOrders },
     { href: '/credit-notes', label: t.navigation.creditNotes },
     { href: '/customers', label: t.navigation.customers },

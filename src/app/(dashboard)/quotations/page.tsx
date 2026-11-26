@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { QuotationService } from '@/services/quotation.service';
 import type { Quotation, QuotationStatus } from '@/types/quotation';
 import { formatDate, monthKey } from '@/utils/format';
@@ -18,6 +18,9 @@ export default function QuotationsPage() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [month, setMonth] = useState('');
+  const [outletFilter, setOutletFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [groupBy, setGroupBy] = useState<'none' | 'outlet' | 'state'>('none');
   const [loading, setLoading] = useState(true);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -38,6 +41,17 @@ export default function QuotationsPage() {
     void loadQuotations();
   }, []);
 
+  const outlets = useMemo(
+    () => [...new Set(quotations.map((q) => q.outlet?.trim()).filter((value): value is string => !!value))]
+      .sort((a, b) => a.localeCompare(b)),
+    [quotations]
+  );
+  const states = useMemo(
+    () => [...new Set(quotations.map((q) => q.state?.trim()).filter((value): value is string => !!value))]
+      .sort((a, b) => a.localeCompare(b)),
+    [quotations]
+  );
+
   const filteredQuotations = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return quotations.filter((q) => {
@@ -47,10 +61,28 @@ export default function QuotationsPage() {
       return (
         (!normalizedQuery || q.quotation_number.toLowerCase().includes(normalizedQuery) || customerName.includes(normalizedQuery)) &&
         (status === 'all' || currentStatus === status) &&
+        (outletFilter === 'all' || q.outlet?.trim() === outletFilter) &&
+        (stateFilter === 'all' || q.state?.trim() === stateFilter) &&
         (!month || monthKey(q.created_at) === month)
       );
     });
-  }, [quotations, query, status, month]);
+  }, [quotations, query, status, outletFilter, stateFilter, month]);
+
+  const groupedQuotations = useMemo(() => {
+    if (groupBy === 'none') return [{ key: 'all', label: '', quotations: filteredQuotations }];
+    const groups = new Map<string, Quotation[]>();
+    filteredQuotations.forEach((quotation) => {
+      const key = (groupBy === 'outlet' ? quotation.outlet : quotation.state)?.trim() || '';
+      groups.set(key, [...(groups.get(key) ?? []), quotation]);
+    });
+    return [...groups.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, rows]) => ({
+        key: `${groupBy}:${key || 'unassigned'}`,
+        label: key || (groupBy === 'outlet' ? t.invoice.noOutlet : t.invoice.noState),
+        quotations: rows,
+      }));
+  }, [filteredQuotations, groupBy, t.invoice.noOutlet, t.invoice.noState]);
 
   const exportQuotations = (rows: Quotation[], fileName: string) => {
     let grandTotal = 0;
@@ -147,7 +179,7 @@ export default function QuotationsPage() {
 
         {errorMessage && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700">{errorMessage}</p>}
 
-        <section className="mb-6 grid gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:grid-cols-3">
+        <section className="mb-6 grid gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:grid-cols-2 lg:grid-cols-3">
           <input
             type="text"
             placeholder={t.quotation?.searchPlaceholder ?? 'Search quotation # or customer...'}
@@ -172,6 +204,34 @@ export default function QuotationsPage() {
             value={month}
             onChange={(e) => setMonth(e.target.value)}
           />
+          <select
+            className="min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-600"
+            value={outletFilter}
+            onChange={(e) => setOutletFilter(e.target.value)}
+          >
+            <option value="all">{t.invoice.allOutlets}</option>
+            {outlets.map((outlet) => <option key={outlet} value={outlet}>{outlet}</option>)}
+          </select>
+          <select
+            className="min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-600"
+            value={stateFilter}
+            onChange={(e) => setStateFilter(e.target.value)}
+          >
+            <option value="all">{t.invoice.allStates}</option>
+            {states.map((stateValue) => <option key={stateValue} value={stateValue}>{stateValue}</option>)}
+          </select>
+          <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold">
+            <span className="shrink-0">{t.invoice.groupBy}</span>
+            <select
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as 'none' | 'outlet' | 'state')}
+              className="min-w-0 flex-1 bg-transparent outline-none"
+            >
+              <option value="none">{t.invoice.noGrouping}</option>
+              <option value="outlet">{t.invoice.byOutlet}</option>
+              <option value="state">{t.invoice.byState}</option>
+            </select>
+          </label>
         </section>
 
         {loading ? (
@@ -183,12 +243,16 @@ export default function QuotationsPage() {
         ) : (
           <>
             <div className="space-y-3 sm:hidden">
-              {filteredQuotations.map((q) => (
+              {groupedQuotations.map((group) => (
+                <Fragment key={group.key}>
+                  {groupBy !== 'none' && <h2 className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-bold text-slate-700">{group.label}</h2>}
+                  {group.quotations.map((q) => (
                 <div key={q.id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
                   <div className="flex items-start justify-between border-b border-slate-100 pb-3">
                     <div>
                       <p className="font-bold text-blue-700">{q.quotation_number}</p>
                       <p className="mt-0.5 text-xs text-slate-500">{q.created_at ? formatDate(q.created_at) : '-'}</p>
+                      {(q.outlet || q.state) && <p className="mt-1 text-xs text-slate-500">{[q.outlet, q.state].filter(Boolean).join(' · ')}</p>}
                     </div>
                     <div>{getStatusBadge(q.status)}</div>
                   </div>
@@ -203,6 +267,7 @@ export default function QuotationsPage() {
                       <p className="text-base font-bold text-slate-900">{formatMoney(q.total_amount)}</p>
                     </div>
                   </div>
+                  {q.internal_remark && <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900"><span className="font-bold">{t.invoice.internalRemark}:</span> {q.internal_remark}</p>}
 
                   <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
                     {q.status !== 'converted' && (
@@ -231,6 +296,8 @@ export default function QuotationsPage() {
                     </button>
                   </div>
                 </div>
+                  ))}
+                </Fragment>
               ))}
             </div>
 
@@ -248,9 +315,16 @@ export default function QuotationsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredQuotations.map((q) => (
+                    {groupedQuotations.map((group) => (
+                      <Fragment key={group.key}>
+                        {groupBy !== 'none' && <tr className="bg-slate-100"><td colSpan={6} className="p-3 font-bold text-slate-700">{group.label}</td></tr>}
+                        {group.quotations.map((q) => (
                       <tr key={q.id} className="hover:bg-slate-50">
-                        <td className="p-4 font-bold text-blue-700">{q.quotation_number}</td>
+                        <td className="p-4 font-bold text-blue-700">
+                          {q.quotation_number}
+                          {(q.outlet || q.state) && <p className="mt-1 text-xs font-normal text-slate-500">{[q.outlet, q.state].filter(Boolean).join(' · ')}</p>}
+                          {q.internal_remark && <p className="mt-1 max-w-xs truncate text-xs font-normal text-amber-800">{t.invoice.internalRemark}: {q.internal_remark}</p>}
+                        </td>
                         <td className="p-4 font-medium">{q.customer?.company_name || q.customer?.name || 'Unknown'}</td>
                         <td className="p-4 text-slate-500">{q.created_at ? formatDate(q.created_at) : '-'}</td>
                         <td className="p-4 text-right font-bold">{formatMoney(q.total_amount)}</td>
@@ -282,6 +356,8 @@ export default function QuotationsPage() {
                           </button>
                         </td>
                       </tr>
+                        ))}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

@@ -16,6 +16,9 @@ type QuotationDraft = {
   items: CreateQuotationItemInput[];
   lessAmount: number;
   validUntil?: string;
+  outlet?: string;
+  state?: string;
+  internalRemark?: string;
 };
 
 const getRecordValue = (record: object, keys: string[]): string => {
@@ -48,6 +51,9 @@ export default function NewQuotationPage() {
 
   const [companyInput, setCompanyInput] = useState('');
   const [contactNameInput, setContactNameInput] = useState('');
+  const [outlet, setOutlet] = useState('');
+  const [state, setState] = useState('');
+  const [internalRemark, setInternalRemark] = useState('');
 
   const [validUntil, setValidUntil] = useState('');
 
@@ -90,6 +96,9 @@ export default function NewQuotationPage() {
           if (existing) {
             setQuotationNumber(existing.quotation_number);
             setLessAmount(Number(existing.less_amount) || 0);
+            setOutlet(existing.outlet || '');
+            setState(existing.state || '');
+            setInternalRemark(existing.internal_remark || '');
 
             if (existing.valid_until) setValidUntil(existing.valid_until.split('T')[0]);
 
@@ -137,6 +146,9 @@ export default function NewQuotationPage() {
               setCompanyInput(matchedCust.company_name || matchedCust.name);
               setContactNameInput(matchedCust.name || '');
             }
+            setOutlet(draft.outlet || matchedCust?.outlet || '');
+            setState(draft.state || matchedCust?.state || '');
+            setInternalRemark(draft.internalRemark || '');
             if (draft.validUntil) setValidUntil(draft.validUntil);
 
             const baseTime = Date.now();
@@ -175,6 +187,8 @@ export default function NewQuotationPage() {
     if (matched) {
       setContactNameInput(matched.name || '');
     }
+    setOutlet(matched?.outlet || '');
+    setState(matched?.state || '');
   };
 
   const resolveCustomerId = async (): Promise<string> => {
@@ -194,6 +208,8 @@ export default function NewQuotationPage() {
     const newCustomer = await QuotationService.createCustomer({
       company_name: trimmedCompany,
       name: trimmedPerson || '',
+      outlet,
+      state,
     });
 
     return newCustomer.id;
@@ -239,6 +255,9 @@ export default function NewQuotationPage() {
         quotation_number: quotationNumber,
         customer_id: customerId,
         payment_terms: finalPaymentTerms,
+        outlet,
+        state,
+        internal_remark: internalRemark,
         valid_until: validUntil || null,
         total_qty: totalQty,
         subtotal_amount: subtotalAmount,
@@ -373,6 +392,43 @@ export default function NewQuotationPage() {
                   />
                 )}
               </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+            <h2 className="mb-3 text-lg font-bold">{t.invoice.locationAndRemarks}</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-bold text-slate-700" htmlFor="quotation-outlet">
+                {t.invoice.outlet}
+                <input
+                  id="quotation-outlet"
+                  value={outlet}
+                  onChange={(event) => setOutlet(event.target.value)}
+                  disabled={loading}
+                  className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+              <label className="block text-sm font-bold text-slate-700" htmlFor="quotation-state">
+                {t.invoice.state}
+                <input
+                  id="quotation-state"
+                  value={state}
+                  onChange={(event) => setState(event.target.value)}
+                  disabled={loading}
+                  className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+              <label className="block text-sm font-bold text-slate-700 sm:col-span-2" htmlFor="quotation-internal-remark">
+                {t.invoice.internalRemark}
+                <textarea
+                  id="quotation-internal-remark"
+                  value={internalRemark}
+                  onChange={(event) => setInternalRemark(event.target.value)}
+                  disabled={loading}
+                  rows={3}
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
             </div>
           </section>
 

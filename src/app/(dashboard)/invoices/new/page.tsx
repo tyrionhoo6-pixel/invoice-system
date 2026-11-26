@@ -14,7 +14,14 @@ import { formatMoney } from '@/lib/utils';
 import { formatDate } from '@/utils/format';
 
 type DraftItem = CreateInvoiceItemInput & { key: number };
-type InvoiceDraft = { customerId: string; items: CreateInvoiceItemInput[]; lessAmount: number };
+type InvoiceDraft = {
+  customerId: string;
+  items: CreateInvoiceItemInput[];
+  lessAmount: number;
+  outlet?: string;
+  state?: string;
+  internalRemark?: string;
+};
 
 const STD_PAYMENT_OPTIONS = ['Cash / COD', '7 Days', '14 Days', '30 Days', '60 Days'];
 
@@ -56,6 +63,9 @@ function InvoiceFormContent() {
   
   const [companyInput, setCompanyInput] = useState('');
   const [contactNameInput, setContactNameInput] = useState('');
+  const [outlet, setOutlet] = useState('');
+  const [state, setState] = useState('');
+  const [internalRemark, setInternalRemark] = useState('');
 
   const [paymentTermsOption, setPaymentTermsOption] = useState('30 Days');
   const [customPaymentTerms, setCustomPaymentTerms] = useState('');
@@ -96,6 +106,9 @@ function InvoiceFormContent() {
             setInvoiceNumber(existingInvoice.invoice_number);
             setLessAmount(Number(existingInvoice.less_amount) || 0);
             setRequiresCustomerSignature(!!existingInvoice.requires_customer_signature);
+            setOutlet(existingInvoice.outlet || '');
+            setState(existingInvoice.state || '');
+            setInternalRemark(existingInvoice.internal_remark || '');
 
             if (existingInvoice.payment_terms) {
               const { option, custom } = parsePaymentTerms(existingInvoice.payment_terms);
@@ -136,6 +149,9 @@ function InvoiceFormContent() {
               setCompanyInput(matchedCust.company_name || matchedCust.name);
               setContactNameInput(matchedCust.name || '');
             }
+            setOutlet(draft.outlet || matchedCust?.outlet || '');
+            setState(draft.state || matchedCust?.state || '');
+            setInternalRemark(draft.internalRemark || '');
             setItems(draft.items.map((item, index) => ({ ...item, unit: item.unit || 'pcs', key: Date.now() + index })));
             setLessAmount(draft.lessAmount);
             sessionStorage.removeItem('invoice-duplicate-draft');
@@ -163,6 +179,8 @@ function InvoiceFormContent() {
     if (matched) {
       setContactNameInput(matched.name || '');
     }
+    setOutlet(matched?.outlet || '');
+    setState(matched?.state || '');
   };
 
   const resolveCustomerId = async (): Promise<string> => {
@@ -182,6 +200,8 @@ function InvoiceFormContent() {
     const newCustomer = await InvoiceService.createCustomer({
       company_name: trimmedCompany,
       name: trimmedPerson || '', 
+      outlet,
+      state,
     });
 
     return newCustomer.id;
@@ -227,6 +247,9 @@ function InvoiceFormContent() {
         invoice_number: invoiceNumber,
         customer_id: customerId,
         payment_terms: finalPaymentTerms,
+        outlet,
+        state,
+        internal_remark: internalRemark,
         requires_customer_signature: requiresCustomerSignature,
         total_qty: totalQty,
         subtotal_amount: subtotalAmount,
@@ -434,6 +457,43 @@ function InvoiceFormContent() {
                 <span className="text-sm font-semibold text-slate-700">
                   Require Customer Signature Column on Printable Invoice
                 </span>
+              </label>
+            </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+            <h2 className="mb-3 text-lg font-bold">{t.invoice.locationAndRemarks}</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-bold text-slate-700" htmlFor="invoice-outlet">
+                {t.invoice.outlet}
+                <input
+                  id="invoice-outlet"
+                  value={outlet}
+                  onChange={(event) => setOutlet(event.target.value)}
+                  disabled={loading}
+                  className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+              <label className="block text-sm font-bold text-slate-700" htmlFor="invoice-state">
+                {t.invoice.state}
+                <input
+                  id="invoice-state"
+                  value={state}
+                  onChange={(event) => setState(event.target.value)}
+                  disabled={loading}
+                  className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+              <label className="block text-sm font-bold text-slate-700 sm:col-span-2" htmlFor="invoice-internal-remark">
+                {t.invoice.internalRemark}
+                <textarea
+                  id="invoice-internal-remark"
+                  value={internalRemark}
+                  onChange={(event) => setInternalRemark(event.target.value)}
+                  disabled={loading}
+                  rows={3}
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                />
               </label>
             </div>
           </section>

@@ -7,6 +7,8 @@ export interface Customer {
   phone?: string;
   email?: string;
   address?: string;
+  outlet?: string | null;
+  state?: string | null;
   registration_no?: string;
   reg_no?: string;
   sst_no?: string;
@@ -39,7 +41,12 @@ export interface Invoice {
   less_amount: number;
   total_amount: number;
   status: InvoiceStatus;
+  paid_amount?: number | string | null;
+  due_date?: string | null;
   payment_terms?: string | null;
+  outlet?: string | null;
+  state?: string | null;
+  internal_remark?: string | null;
   requires_customer_signature?: boolean;
   created_at?: string;
   customer?: Customer;

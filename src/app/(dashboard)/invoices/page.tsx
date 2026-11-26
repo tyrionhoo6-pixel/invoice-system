@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { formatMoney } from '@/lib/utils';
 import { InvoiceService } from '@/services/invoice.service';
@@ -21,6 +21,9 @@ export default function InvoicesPage() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [customerId, setCustomerId] = useState('all');
+  const [outletFilter, setOutletFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [groupBy, setGroupBy] = useState<'none' | 'outlet' | 'state'>('none');
   const [month, setMonth] = useState('');
   const [exportMode, setExportMode] = useState('current');
 
@@ -76,6 +79,17 @@ export default function InvoicesPage() {
     );
   }, [invoices, t]);
 
+  const outlets = useMemo(
+    () => [...new Set(invoices.map((invoice) => invoice.outlet?.trim()).filter((value): value is string => !!value))]
+      .sort((a, b) => a.localeCompare(b)),
+    [invoices]
+  );
+  const states = useMemo(
+    () => [...new Set(invoices.map((invoice) => invoice.state?.trim()).filter((value): value is string => !!value))]
+      .sort((a, b) => a.localeCompare(b)),
+    [invoices]
+  );
+
   const filteredInvoices = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -90,11 +104,29 @@ export default function InvoicesPage() {
 
       const matchesStatus = status === 'all' || currentStatus === status;
       const matchesCustomer = customerId === 'all' || invoice.customer_id === customerId;
+      const matchesOutlet = outletFilter === 'all' || invoice.outlet?.trim() === outletFilter;
+      const matchesState = stateFilter === 'all' || invoice.state?.trim() === stateFilter;
       const matchesMonth = !month || monthKey(invoice.created_at) === month;
 
-      return matchesQuery && matchesStatus && matchesCustomer && matchesMonth;
+      return matchesQuery && matchesStatus && matchesCustomer && matchesOutlet && matchesState && matchesMonth;
     });
-  }, [invoices, query, status, customerId, month]);
+  }, [invoices, query, status, customerId, outletFilter, stateFilter, month]);
+
+  const groupedInvoices = useMemo(() => {
+    if (groupBy === 'none') return [{ key: 'all', label: '', invoices: filteredInvoices }];
+    const groups = new Map<string, Invoice[]>();
+    filteredInvoices.forEach((invoice) => {
+      const key = (groupBy === 'outlet' ? invoice.outlet : invoice.state)?.trim() || '';
+      groups.set(key, [...(groups.get(key) ?? []), invoice]);
+    });
+    return [...groups.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, rows]) => ({
+        key: `${groupBy}:${key || 'unassigned'}`,
+        label: key || (groupBy === 'outlet' ? t.invoice.noOutlet : t.invoice.noState),
+        invoices: rows,
+      }));
+  }, [filteredInvoices, groupBy, t.invoice.noOutlet, t.invoice.noState]);
 
   const summary = useMemo(() => {
     return filteredInvoices.reduce(
@@ -373,7 +405,7 @@ export default function InvoicesPage() {
         </section>
 
         <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_190px_170px_170px]">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -409,6 +441,34 @@ export default function InvoicesPage() {
               <option value="unpaid">{t.status.unpaid}</option>
               <option value="void">{t.status.void}</option>
             </select>
+            <select
+              value={outletFilter}
+              onChange={(e) => setOutletFilter(e.target.value)}
+              className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 font-semibold"
+            >
+              <option value="all">{t.invoice.allOutlets}</option>
+              {outlets.map((outlet) => <option key={outlet} value={outlet}>{outlet}</option>)}
+            </select>
+            <select
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value)}
+              className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 font-semibold"
+            >
+              <option value="all">{t.invoice.allStates}</option>
+              {states.map((stateValue) => <option key={stateValue} value={stateValue}>{stateValue}</option>)}
+            </select>
+            <label className="flex min-h-12 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 font-semibold">
+              <span className="shrink-0">{t.invoice.groupBy}</span>
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as 'none' | 'outlet' | 'state')}
+                className="min-w-0 flex-1 bg-transparent outline-none"
+              >
+                <option value="none">{t.invoice.noGrouping}</option>
+                <option value="outlet">{t.invoice.byOutlet}</option>
+                <option value="state">{t.invoice.byState}</option>
+              </select>
+            </label>
           </div>
 
           <div className="mt-5 overflow-x-auto">
@@ -439,7 +499,14 @@ export default function InvoicesPage() {
                   </tr>
                 )}
                 {!loading &&
-                  filteredInvoices.map((invoice) => {
+                  groupedInvoices.map((group) => (
+                    <Fragment key={group.key}>
+                      {groupBy !== 'none' && (
+                        <tr className="bg-slate-100">
+                          <td colSpan={6} className="px-3 py-2 font-bold text-slate-700">{group.label}</td>
+                        </tr>
+                      )}
+                      {group.invoices.map((invoice) => {
                     const currentStatus = (invoice.status ?? 'unpaid').toLowerCase();
                     const isPaid = currentStatus === 'paid';
                     const isVoid = currentStatus === 'void';
@@ -456,6 +523,11 @@ export default function InvoicesPage() {
                           >
                             {invoice.invoice_number}
                           </Link>
+                          {(invoice.outlet || invoice.state) && (
+                            <p className="mt-1 text-xs font-normal text-slate-500">
+                              {[invoice.outlet, invoice.state].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
                         </td>
                         <td className="px-3 py-4">
                           <p className="font-semibold">
@@ -538,7 +610,9 @@ export default function InvoicesPage() {
                         </td>
                       </tr>
                     );
-                  })}
+                      })}
+                    </Fragment>
+                  ))}
               </tbody>
             </table>
           </div>
